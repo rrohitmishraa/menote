@@ -120,8 +120,9 @@ public final class NoteStore {
     }
 
     @discardableResult
-    public func createNote(text: String = "", selectIt: Bool = true) -> Note {
+    public func createNote(text: String = "", richText: Data? = nil, selectIt: Bool = true) -> Note {
         var note = Note(blocks: text.isEmpty ? [] : [.text(text)])
+        note.richText = richText
         if !text.isEmpty {
             note.title = deriveTitle(from: text)
         }
@@ -167,8 +168,18 @@ public final class NoteStore {
         notesChanged?()
     }
 
-    public func updateCurrentText(_ text: String) {
-        updateText(for: currentNoteID, text: text)
+    public func updateCurrentText(_ text: String, richText: Data? = nil) {
+        if let id = currentNoteID, note(withID: id) != nil {
+            updateNote(id) { note in
+                note.plainText = text
+                note.richText = richText
+            }
+        } else {
+            draftText = text
+            if !text.isEmpty {
+                createNote(text: text, richText: richText)
+            }
+        }
     }
 
     public func setTitle(_ title: String, for id: UUID) {

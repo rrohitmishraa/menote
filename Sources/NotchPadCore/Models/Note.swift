@@ -4,6 +4,7 @@ public struct Note: Codable, Identifiable, Equatable {
     public let id: UUID
     public var title: String
     public var blocks: [ContentBlock]
+    public var richText: Data?
     public var tags: [String]
     public var isPinned: Bool
     public var isArchived: Bool
@@ -14,6 +15,7 @@ public struct Note: Codable, Identifiable, Equatable {
         id: UUID = UUID(),
         title: String = "",
         blocks: [ContentBlock] = [],
+        richText: Data? = nil,
         tags: [String] = [],
         isPinned: Bool = false,
         isArchived: Bool = false,
@@ -23,6 +25,7 @@ public struct Note: Codable, Identifiable, Equatable {
         self.id = id
         self.title = title
         self.blocks = blocks
+        self.richText = richText
         self.tags = tags
         self.isPinned = isPinned
         self.isArchived = isArchived
@@ -49,6 +52,7 @@ public struct Note: Codable, Identifiable, Equatable {
                 }
             } else {
                 blocks = [.text(newValue)]
+            richText = nil
             }
         }
     }

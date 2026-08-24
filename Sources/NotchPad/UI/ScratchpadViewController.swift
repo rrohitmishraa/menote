@@ -93,9 +93,9 @@ final class LineNumberView: NSView {
 
 final class EditorTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
-
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+
         guard string.isEmpty else { return }
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.placeholderTextColor,
@@ -104,6 +104,58 @@ final class EditorTextView: NSTextView {
         let placeholder = "Start typing…"
         let rect = textContainerInset
         (placeholder as NSString).draw(at: NSPoint(x: rect.width, y: rect.height + 2), withAttributes: attrs)
+    }
+
+    private let baseFont: NSFont = .systemFont(ofSize: 18)
+
+    func toggleTrait(_ trait: NSFontTraitMask) {
+        let manager = NSFontManager.shared
+        guard let storage = textStorage else { return }
+        let selected = selectedRange()
+        if selected.length > 0 {
+            // Coordinate through NSTextView so the formatting change is recorded as a
+            // normal undoable operation in its NSUndoManager (⌘Z / ⇧⌘Z).
+            if shouldChangeText(in: selected, replacementString: nil) {
+                storage.beginEditing()
+                var index = selected.location
+                let end = selected.upperBound
+                while index < end {
+                    var effective = NSRange()
+                    let attributes = storage.attributes(at: index, effectiveRange: &effective)
+                    let font = (attributes[.font] as? NSFont) ?? baseFont
+                    let has = manager.traits(of: font).contains(trait)
+                    let newFont = has
+                        ? manager.convert(font, toNotHaveTrait: trait)
+                        : manager.convert(font, toHaveTrait: trait)
+                    storage.addAttribute(.font, value: newFont, range: NSIntersectionRange(effective, selected))
+                    index = NSMaxRange(effective)
+                }
+                storage.endEditing()
+                didChangeText()
+            }
+        } else {
+            var attrs = typingAttributes
+            let font = (attrs[.font] as? NSFont) ?? baseFont
+            let has = manager.traits(of: font).contains(trait)
+            let newFont = has
+                ? manager.convert(font, toNotHaveTrait: trait)
+                : manager.convert(font, toHaveTrait: trait)
+            attrs[.font] = newFont
+            typingAttributes = attrs
+        }
+        needsDisplay = true
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers?.lowercased() {
+            switch chars {
+            case "b": toggleTrait(.boldFontMask); return true
+            case "i": toggleTrait(.italicFontMask); return true
+            default: break
+            }
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -123,6 +175,7 @@ final class ScratchpadViewController: NSViewController {
     private var editorScroll: NSScrollView!
     private(set) var textView: EditorTextView!
     private var lineNumberView: LineNumberView!
+    private var headerView: NSView!
     private var footerView: NSView!
     private var statusLabel: NSTextField!
     private var storageDot: StatusDotView!
@@ -149,6 +202,7 @@ final class ScratchpadViewController: NSViewController {
         root.layer?.cornerCurve = .continuous
         view = root
 
+        buildHeader()
         buildFooter()
         buildEditor()
 
@@ -188,7 +242,7 @@ final class ScratchpadViewController: NSViewController {
         textView.font = .systemFont(ofSize: 18)
         textView.textColor = .labelColor
         textView.insertionPointColor = .controlAccentColor
-        textView.isRichText = false
+        textView.isRichText = true
         textView.importsGraphics = false
         textView.isAutomaticQuoteSubstitutionEnabled = true
         textView.isAutomaticDashSubstitutionEnabled = true
@@ -236,14 +290,65 @@ final class ScratchpadViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             lineNumberView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            lineNumberView.topAnchor.constraint(equalTo: view.topAnchor),
+            lineNumberView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
             lineNumberView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             lineNumberView.widthAnchor.constraint(equalToConstant: 44),
 
             editorScroll.leadingAnchor.constraint(equalTo: lineNumberView.trailingAnchor),
             editorScroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            editorScroll.topAnchor.constraint(equalTo: view.topAnchor),
+            editorScroll.topAnchor.constraint(equalTo: headerView.bottomAnchor),
             editorScroll.bottomAnchor.constraint(equalTo: footerView.topAnchor)
+        ])
+    }
+
+    private func buildHeader() {
+        headerView = NSView()
+        headerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(headerView)
+
+        let boldButton = NSButton(title: "B", target: self, action: #selector(toggleBold))
+        boldButton.bezelStyle = .texturedRounded
+        boldButton.controlSize = .small
+        boldButton.font = NSFont.boldSystemFont(ofSize: 13)
+        boldButton.refusesFirstResponder = true
+        boldButton.toolTip = "Bold (⌘B)"
+
+        let italicButton = NSButton(title: "I", target: self, action: #selector(toggleItalic))
+        italicButton.bezelStyle = .texturedRounded
+        italicButton.controlSize = .small
+        italicButton.font = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 13), toHaveTrait: .italicFontMask)
+        italicButton.refusesFirstResponder = true
+        italicButton.toolTip = "Italic (⌘I)"
+
+        let stack = NSStackView(views: [boldButton, italicButton])
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.alignment = .centerY
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 0)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(stack)
+
+        let separator = NSView()
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(separator)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: headerView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: headerView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: separator.topAnchor),
+
+            separator.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: headerView.bottomAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+
+            headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            headerView.topAnchor.constraint(equalTo: view.topAnchor),
+            headerView.heightAnchor.constraint(equalToConstant: 34)
         ])
     }
 
@@ -284,12 +389,60 @@ final class ScratchpadViewController: NSViewController {
     func reloadFromStore() {
         guard !isLoadingContent else { return }
         isLoadingContent = true
-        textView.string = store.currentNote?.plainText ?? store.draftText
+        if let rtf = store.currentNote?.richText,
+           let attr = NSAttributedString(rtf: rtf, documentAttributes: nil) {
+            textView.textStorage?.setAttributedString(normalizeAttributedString(attr))
+        } else {
+            let string = store.currentNote?.plainText ?? store.draftText
+            textView.textStorage?.setAttributedString(NSAttributedString(
+                string: string,
+                attributes: [.font: NSFont.systemFont(ofSize: 18),
+                             .foregroundColor: NSColor.labelColor]))
+        }
         updatePlaceholder()
         textView.scrollToBeginningOfDocument(nil)
+        textView.typingAttributes = [.foregroundColor: NSColor.labelColor,
+                                     .font: NSFont.systemFont(ofSize: 18)]
         isLoadingContent = false
         resizeEditorToContent()
         lineNumberView?.needsDisplay = true
+    }
+
+    private func normalizeAttributedString(_ attr: NSAttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let manager = NSFontManager.shared
+        var index = 0
+        while index < attr.length {
+            var effective = NSRange()
+            let attributes = attr.attributes(at: index, effectiveRange: &effective)
+            var next = attributes
+            if let font = attributes[.font] as? NSFont {
+                let traits = manager.traits(of: font)
+                var normalized = NSFont.systemFont(ofSize: 18)
+                if traits.contains(.boldFontMask) {
+                    normalized = manager.convert(normalized, toHaveTrait: .boldFontMask)
+                }
+                if traits.contains(.italicFontMask) {
+                    normalized = manager.convert(normalized, toHaveTrait: .italicFontMask)
+                }
+                next[.font] = normalized
+            } else {
+                next[.font] = NSFont.systemFont(ofSize: 18)
+            }
+            let substring = attr.attributedSubstring(from: effective).string
+            result.append(NSAttributedString(string: substring, attributes: next))
+            index = NSMaxRange(effective)
+        }
+        return result
+    }
+
+    private func currentRichTextData() -> Data? {
+        guard let storage = textView.textStorage, storage.length > 0 else { return nil }
+        let fullRange = NSRange(location: 0, length: storage.length)
+        let documentAttributes: [NSAttributedString.DocumentAttributeKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.rtf
+        ]
+        return try? storage.rtf(from: fullRange, documentAttributes: documentAttributes)
     }
 
     private func resizeEditorToContent() {
@@ -347,7 +500,9 @@ final class ScratchpadViewController: NSViewController {
 
     func newNote() {
         store.beginDraft()
-        textView.string = ""
+        textView.textStorage?.setAttributedString(NSAttributedString(string: ""))
+        textView.typingAttributes = [.foregroundColor: NSColor.labelColor,
+                                     .font: NSFont.systemFont(ofSize: 18)]
         updatePlaceholder()
         lineNumberView?.needsDisplay = true
         applyFocus(.editor)
@@ -378,7 +533,16 @@ extension ScratchpadViewController: NSTextViewDelegate {
     func textDidChange(_ notification: Notification) {
         resizeEditorToContent()
         guard !isLoadingContent else { return }
-        store.updateCurrentText(textView.string)
+        let rtf = currentRichTextData()
+        store.updateCurrentText(textView.string, richText: rtf)
         lineNumberRedraw(nil)
+    }
+
+    @objc private func toggleBold() {
+        textView.toggleTrait(.boldFontMask)
+    }
+
+    @objc private func toggleItalic() {
+        textView.toggleTrait(.italicFontMask)
     }
 }

@@ -1,142 +1,171 @@
-PHASE 2C — FINAL LINE NUMBER BASELINE ALIGNMENT
+PHASE 3B — FIX UNDO FOR BOLD / ITALIC ONLY
 
-The line-number implementation is now functionally correct.
+Bold and italic formatting work correctly, but ⌘Z does not undo formatting changes.
 
-DO NOT change the architecture or behavior.
+Normal editing undo already works correctly.
 
-Everything currently works correctly:
-
-- Line numbers appear correctly
-- Numbers update correctly
-- Empty lines work correctly
-- Numbers do not shift when typing
-- Scrolling works
-- Text wrapping works
-- Enter works
-- Editor remains responsive
-- Persistence works
-
-There is ONLY one remaining visual issue:
-
-The line numbers sit slightly LOWER than the corresponding text.
-
-Example:
-
-1    Hello
-2    World
-3    Test
-
-The numbers should be vertically aligned with the text glyphs/baselines.
-
-Current appearance is approximately:
-
-  1    Hello
-  2    World
-  3    Test
-
-where the numbers are a few pixels too low.
+DO NOT change the existing editor architecture or formatting behavior.
 
 ==================================================
-FIX ONLY THIS
+CURRENT BEHAVIOR
 ==================================================
 
-Do not change:
+Works:
 
-- line-number calculation
-- line detection
-- scrolling
-- wrapping
-- NSTextView
-- NSScrollView
-- persistence
-- text storage
-- editor font
-- editor inset
-- gutter width
-- spacing
-- keyboard behavior
+- Typing → undo works
+- Deleting → undo works
+- Enter → undo works
+- Bold → applies correctly
+- Italic → applies correctly
 
-Do not rewrite the implementation.
+Broken:
 
-Only correct the vertical drawing position of the line-number text.
+- Apply Bold → ⌘Z does NOT remove the bold formatting
+- Apply Italic → ⌘Z does NOT remove the italic formatting
 
 ==================================================
-CORRECT APPROACH
+ROOT CAUSE TO INVESTIGATE
 ==================================================
 
-The line number must use the SAME BASELINE as the corresponding editor text.
+The formatting implementation is likely modifying NSTextStorage attributes directly.
 
-Do not align using:
+For example:
 
-- boundingRect.midY
-- lineFragmentRect.midY
-- vertical centering
-- arbitrary fixed offsets
+textStorage.addAttribute(...)
+textStorage.removeAttribute(...)
+textStorage.setAttributes(...)
 
-Use the actual baseline position from NSLayoutManager / the editor's text layout.
+These operations may not automatically create an undo operation in the NSTextView's undo manager.
 
-The line number's text drawing origin should be calculated so that:
+Do NOT simply rebuild the editor or replace the NSTextView.
 
-line-number baseline == editor text baseline
+==================================================
+REQUIRED FIX
+==================================================
 
-For example, if the editor text baseline is Y:
+Make Bold and Italic formatting operations participate in the SAME NSUndoManager used by NSTextView.
 
-    Hello
-──────────────  ← text baseline
-    1
+When applying a formatting change:
 
-the baseline of "1" must be exactly on that same Y coordinate.
+1. Capture the previous attributed-string attributes for the affected range.
+2. Apply the new attributes.
+3. Register an undo operation that restores the previous attributes.
+4. The undo operation must itself correctly register the inverse operation so ⇧⌘Z works.
 
-The number's glyph height is irrelevant; its BASELINE is what must align.
+The formatting operation should behave like a normal NSTextView editing operation.
 
 ==================================================
 IMPORTANT
 ==================================================
 
-Do NOT solve this by randomly trying:
+Do NOT manually manipulate the visible text.
 
-+1
--1
-+2
--2
-etc.
+Do NOT store formatting commands inside the text.
 
-If a small visual adjustment is genuinely required because the gutter font differs from the editor font, derive that adjustment from the font metrics rather than guessing.
+Do NOT create a second undo manager.
 
-Prefer using the same font family/weight as the editor with an appropriately smaller size so the baseline metrics remain predictable.
+Use the NSTextView's existing undoManager.
 
-==================================================
-TEST
-==================================================
+Do NOT break:
 
-Use:
-
-Hello
-World
-Third line
-
-
-Verify visually that:
-
-1    Hello
-2    World
-3    Third line
-
-has matching text baselines.
-
-Then test:
-
-- empty lines
-- newly created lines
-- long wrapped lines
-- vertical scrolling
+- ⌘Z
+- ⇧⌘Z
 - typing
-- Enter
+- selection
+- copy/paste
+- persistence
+- line numbers
+- scrolling
+- wrapping
 
-Nothing else should change.
+==================================================
+TEST EXACTLY
+==================================================
 
-Build and launch.
+Test 1 — Bold
 
-Do NOT implement any other feature.
+Type:
 
-This is a final visual alignment correction only.
+Hello World
+
+Select "Hello".
+
+Press ⌘B.
+
+Expected:
+
+Hello World
+
+with Hello bold.
+
+Press ⌘Z.
+
+Expected:
+
+Hello returns to normal.
+
+Press ⇧⌘Z.
+
+Expected:
+
+Hello becomes bold again.
+
+Test 2 — Italic
+
+Select "World".
+
+Press ⌘I.
+
+Press ⌘Z.
+
+Expected:
+
+World returns to normal.
+
+Press ⇧⌘Z.
+
+Expected:
+
+World becomes italic again.
+
+Test 3 — Multiple operations
+
+1. Bold "Hello"
+2. Italic "World"
+3. Type "!"
+4. Press ⌘Z
+
+Only "!" should be removed.
+
+Press ⌘Z again.
+
+Italic formatting should be undone.
+
+Press ⌘Z again.
+
+Bold formatting should be undone.
+
+Then use ⇧⌘Z repeatedly and verify every operation is restored in the correct order.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do not fix this with a special-case global "undo formatting" button.
+
+⌘Z and ⇧⌘Z must work naturally through NSTextView's existing undo manager.
+
+Only fix the undo integration for Bold and Italic.
+
+Build and launch the app.
+
+Report:
+
+- root cause
+- how formatting is registered with NSUndoManager
+- files changed
+- build result
+- undo test result
+- redo test result
+
+Do not implement any other features.
