@@ -183,7 +183,8 @@ final class ScratchpadViewController: NSViewController {
     private var statusTimer: Timer?
 
     // Find bar state
-    private var findBar: NSView!
+    private var findControls: NSStackView!
+    private var findIconButton: NSButton!
     private var findField: NSSearchField!
     private var findCount: NSTextField!
     private var isFindOpen = false
@@ -215,7 +216,6 @@ final class ScratchpadViewController: NSViewController {
         buildHeader()
         buildFooter()
         buildEditor()
-        buildFindBar()
 
         store.currentNoteChanged = { [weak self] in self?.reloadFromStore() }
         store.statusChanged = { [weak self] in self?.updateFooter() }
@@ -331,24 +331,51 @@ final class ScratchpadViewController: NSViewController {
         italicButton.refusesFirstResponder = true
         italicButton.toolTip = "Italic (⌘I)"
 
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.widthAnchor.constraint(equalToConstant: 8).isActive = true
-
-        let findButton = NSButton(title: "Find", target: self, action: #selector(findOpen))
-        findButton.bezelStyle = .texturedRounded
-        findButton.controlSize = .small
-        findButton.font = NSFont.systemFont(ofSize: 12)
-        findButton.refusesFirstResponder = true
-        findButton.toolTip = "Find (⌘F)"
-
-        let stack = NSStackView(views: [boldButton, italicButton, spacer, findButton])
+        let stack = NSStackView(views: [boldButton, italicButton])
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.alignment = .centerY
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 0)
         stack.translatesAutoresizingMaskIntoConstraints = false
         headerView.addSubview(stack)
+
+        // Find controls, anchored to the right edge of the header (not over the text).
+        findField = NSSearchField()
+        findField.translatesAutoresizingMaskIntoConstraints = false
+        findField.delegate = self
+        findField.font = .systemFont(ofSize: 12)
+        findField.placeholderString = "Find"
+        findField.maximumRecents = 0
+        findField.sendsSearchStringImmediately = true
+        findField.widthAnchor.constraint(equalToConstant: 160).isActive = true
+
+        findCount = NSTextField(labelWithString: "")
+        findCount.font = .systemFont(ofSize: 11)
+        findCount.textColor = .secondaryLabelColor
+
+        let findControls = NSStackView(views: [findCount, findField])
+        findControls.orientation = .horizontal
+        findControls.spacing = 8
+        findControls.alignment = .centerY
+        findControls.isHidden = true
+        self.findControls = findControls
+
+        findIconButton = NSButton(
+            image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find")!,
+            target: self, action: #selector(toggleFind))
+        findIconButton.bezelStyle = .texturedRounded
+        findIconButton.controlSize = .small
+        findIconButton.imagePosition = .imageOnly
+        findIconButton.refusesFirstResponder = true
+        findIconButton.toolTip = "Find (⌘F)"
+
+        let rightStack = NSStackView(views: [findControls, findIconButton])
+        rightStack.orientation = .horizontal
+        rightStack.spacing = 8
+        rightStack.alignment = .centerY
+        rightStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 12)
+        rightStack.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(rightStack)
 
         let separator = NSView()
         separator.wantsLayer = true
@@ -358,9 +385,13 @@ final class ScratchpadViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: headerView.trailingAnchor),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: rightStack.leadingAnchor, constant: -12),
             stack.topAnchor.constraint(equalTo: headerView.topAnchor),
             stack.bottomAnchor.constraint(equalTo: separator.topAnchor),
+
+            rightStack.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+            rightStack.topAnchor.constraint(equalTo: headerView.topAnchor),
+            rightStack.bottomAnchor.constraint(equalTo: separator.topAnchor),
 
             separator.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
@@ -404,59 +435,6 @@ final class ScratchpadViewController: NSViewController {
             footerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             footerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             footerView.heightAnchor.constraint(equalToConstant: 28)
-        ])
-    }
-
-    private func buildFindBar() {
-        findBar = NSView()
-        findBar.translatesAutoresizingMaskIntoConstraints = false
-        findBar.wantsLayer = true
-        findBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
-        findBar.layer?.cornerRadius = 8
-        findBar.layer?.borderWidth = 1
-        findBar.layer?.borderColor = NSColor.separatorColor.cgColor
-        findBar.isHidden = true
-        view.addSubview(findBar)
-
-        findCount = NSTextField(labelWithString: "")
-        findCount.font = .systemFont(ofSize: 11)
-        findCount.textColor = .secondaryLabelColor
-        findCount.alignment = .right
-
-        findField = NSSearchField()
-        findField.translatesAutoresizingMaskIntoConstraints = false
-        findField.delegate = self
-        findField.font = .systemFont(ofSize: 12)
-        findField.placeholderString = "Find"
-        findField.maximumRecents = 0
-        findField.sendsSearchStringImmediately = true
-
-        let closeButton = NSButton(title: "✕", target: self, action: #selector(closeFind))
-        closeButton.bezelStyle = .rounded
-        closeButton.controlSize = .small
-        closeButton.font = NSFont.systemFont(ofSize: 11)
-        closeButton.refusesFirstResponder = true
-        closeButton.toolTip = "Close Find (Esc)"
-
-        let stack = NSStackView(views: [findCount, findField, closeButton])
-        stack.orientation = .horizontal
-        stack.spacing = 8
-        stack.alignment = .centerY
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        findBar.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: findBar.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: findBar.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: findBar.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: findBar.bottomAnchor),
-
-            findField.widthAnchor.constraint(equalToConstant: 170),
-
-            findBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-            findBar.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: 6),
-            findBar.widthAnchor.constraint(equalToConstant: 250)
         ])
     }
 
@@ -627,9 +605,25 @@ extension ScratchpadViewController: NSSearchFieldDelegate {
 
     @objc func findOpen(_ sender: Any?) {
         isFindOpen = true
-        findBar.isHidden = false
+        findControls.isHidden = false
+        setFindIcon(close: true)
         view.window?.makeFirstResponder(findField)
         runSearch()
+    }
+
+    @objc private func toggleFind(_ sender: Any?) {
+        if isFindOpen {
+            closeFind()
+        } else {
+            findOpen(sender)
+        }
+    }
+
+    private func setFindIcon(close: Bool) {
+        let symbol = close ? "xmark" : "magnifyingglass"
+        let label = close ? "Close Find (Esc)" : "Find (⌘F)"
+        findIconButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        findIconButton.toolTip = label
     }
 
     @objc func findNext(_ sender: Any?) {
@@ -721,7 +715,8 @@ extension ScratchpadViewController: NSSearchFieldDelegate {
 
     @objc private func closeFind() {
         isFindOpen = false
-        findBar.isHidden = true
+        findControls.isHidden = true
+        setFindIcon(close: false)
         matchRanges.removeAll()
         currentMatchIndex = 0
         clearHighlights()
