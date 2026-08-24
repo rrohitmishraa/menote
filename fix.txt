@@ -1,0 +1,204 @@
+DIAGNOSTIC + FIX — NSTextView WIDTH MISMATCH
+
+The editor is now vertically scrollable, but the current configuration has a sizing problem:
+
+- Text does not wrap correctly.
+- Horizontal space appears mismatched.
+- The vertical scrollbar does not appear as expected.
+- I suspect the NSTextView/document view width does not match the NSScrollView's actual viewport width.
+
+Do NOT redesign the editor.
+
+Do NOT touch:
+- persistence
+- menu-bar behavior
+- keyboard shortcuts
+- first responder behavior
+- line numbers
+- vertical scrolling architecture
+
+We need to inspect the actual geometry first.
+
+==================================================
+1. PRINT ACTUAL GEOMETRY
+==================================================
+
+After the editor is displayed, print:
+
+NSScrollView:
+
+editorScroll.frame
+editorScroll.bounds
+editorScroll.contentView.frame
+editorScroll.contentView.bounds
+editorScroll.contentSize
+
+NSTextView:
+
+textView.frame
+textView.bounds
+textView.visibleRect
+
+NSTextContainer:
+
+textContainer.containerSize
+textContainer.lineFragmentPadding
+textContainer.widthTracksTextView
+
+Also print:
+
+editorScroll.verticalScroller?.frame
+editorScroll.hasVerticalScroller
+editorScroll.hasHorizontalScroller
+
+Calculate and report:
+
+1. Available viewport width
+2. NSTextView width
+3. NSTextContainer width
+4. Difference between them
+
+I specifically want to know whether:
+
+textView width != scrollView contentView width
+
+and whether:
+
+textContainer width != textView usable width
+
+==================================================
+2. REQUIRED GEOMETRY
+==================================================
+
+The intended relationship is:
+
+NSScrollView
+┌──────────────────────────────┐
+│ NSTextView                   │
+│                              │
+│  text wraps inside THIS      │
+│  exact available width       │
+│                              │
+└──────────────────────────────┘
+
+The NSTextView should track the scroll view's viewport WIDTH.
+
+The NSTextView should NOT be wider than the viewport.
+
+The NSTextContainer should track the NSTextView width.
+
+Use:
+
+textContainer.widthTracksTextView = true
+
+The text view should not horizontally resize beyond the viewport.
+
+==================================================
+3. PADDING
+==================================================
+
+There is editor padding/inset.
+
+Do NOT accidentally include padding twice when calculating the text container width.
+
+The usable text width should be:
+
+available editor width
+minus the intended left/right text insets
+
+The text container should wrap at that width.
+
+==================================================
+4. IMPORTANT — DO NOT BREAK VERTICAL SCROLLING
+==================================================
+
+The current vertical scrolling implementation works.
+
+Preserve the mechanism that makes the document vertically larger than the viewport.
+
+Only correct the horizontal sizing/wrapping relationship.
+
+Do NOT make the NSTextView fixed-height.
+
+Do NOT constrain the document view's height to the viewport height.
+
+The desired state is:
+
+width:
+    textView ≈ viewport width
+
+height:
+    textView/document can become > viewport height
+
+Therefore:
+
+horizontal:
+    no scrolling
+    text wraps
+
+vertical:
+    document grows
+    NSScrollView scrolls
+
+==================================================
+5. TEST WITH A SINGLE LONG LINE
+==================================================
+
+Use this exact test text:
+
+"This is a very long line of text that should wrap automatically inside the editor width instead of extending beyond the editor and creating horizontal scrolling."
+
+Do NOT press Enter.
+
+Expected:
+
+The sentence wraps onto multiple visual lines.
+
+Then add enough text to exceed the viewport vertically.
+
+Expected:
+
+Vertical scrolling works.
+
+There must be:
+
+NO horizontal scrollbar.
+
+==================================================
+6. DO NOT HIDE THE PROBLEM
+==================================================
+
+Do not solve this merely with:
+
+hasHorizontalScroller = false
+
+That only hides the scrollbar.
+
+The actual NSTextView/NSTextContainer width must be correct so the text genuinely wraps.
+
+==================================================
+7. FINAL VERIFICATION
+
+After fixing:
+
+- Type a long line.
+- Confirm it wraps.
+- Add enough content to exceed the viewport.
+- Confirm vertical scrolling works.
+- Confirm the text view width matches the viewport.
+- Confirm no horizontal scrolling.
+- Confirm typing still works.
+- Confirm Enter still works.
+- Confirm persistence still works.
+
+Report the measured widths BEFORE the fix and AFTER the fix.
+
+Also report:
+- root cause
+- exact constraint/property responsible
+- exact change made
+- files changed
+- build result
+- actual executable launched
+
+Do not proceed to line numbers.

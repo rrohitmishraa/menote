@@ -1,0 +1,34 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "NotchPad: Build",
+            "type": "shell",
+            "command": "./build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NotchPad: Run",
+            "type": "shell",
+            "command": "./run.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "NotchPad: Test",
+            "type": "shell",
+            "command": "./test.sh",
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "NotchPad: Release",
+            "type": "shell",
+            "command": "./build-release.sh",
+            "problemMatcher": []
+        }
+    ]
+}
