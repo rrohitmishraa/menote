@@ -7,12 +7,87 @@ final class LineNumberView: NSView {
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
 
-    func updateLineNumbers() {
-        needsDisplay = true
+    override func updateLayer() {
+        super.updateLayer()
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        guard let textView = textView else { return }
+
+        guard let layoutManager = textView.layoutManager else { return }
+
+        let editorFont = textView.font ?? NSFont.systemFont(ofSize: 18)
+        let gutterFont = NSFont.systemFont(ofSize: max(editorFont.pointSize - 4, 11), weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: gutterFont,
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ]
+
+        var baselineOffset: CGFloat? = nil
+
+        let gutterWidth = bounds.width
+        let inset = textView.textContainerInset
+        let scrollOffset = textView.enclosingScrollView?.contentView.bounds.origin.y ?? 0
+
+        let lines = textView.string.components(separatedBy: "\n")
+        var charOffset = 0
+        var prevFragmentMaxY: CGFloat = 0
+        var lastFragHeight: CGFloat = editorFont.ascender - editorFont.descender
+
+        for (lineNumber, line) in lines.enumerated() {
+            let charRange = NSRange(location: charOffset, length: line.utf16.count)
+            var actualCharRange = NSRange()
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: charRange, actualCharacterRange: &actualCharRange)
+
+            var effectiveRange = NSRange()
+            let lineFragmentRect: NSRect
+            if glyphRange.location < layoutManager.numberOfGlyphs {
+                lineFragmentRect = layoutManager.lineFragmentRect(
+                    forGlyphAt: glyphRange.location, effectiveRange: &effectiveRange, withoutAdditionalLayout: true)
+                if baselineOffset == nil, !line.isEmpty {
+                    baselineOffset = layoutManager.location(forGlyphAt: glyphRange.location).y
+                }
+            } else {
+                lineFragmentRect = .zero
+            }
+
+            let fragTop: CGFloat
+            let fragHeight: CGFloat
+            if lineFragmentRect.height > 0 {
+                fragTop = lineFragmentRect.origin.y
+                fragHeight = lineFragmentRect.height
+                prevFragmentMaxY = fragTop + fragHeight
+                lastFragHeight = fragHeight
+            } else {
+                fragTop = prevFragmentMaxY
+                fragHeight = lastFragHeight
+                prevFragmentMaxY = fragTop + fragHeight
+            }
+
+            let visibleTop = fragTop + inset.height - scrollOffset
+
+            guard visibleTop > -fragHeight else {
+                charOffset += line.utf16.count + 1
+                continue
+            }
+            guard visibleTop < bounds.height + fragHeight else {
+                break
+            }
+
+            let baselineY = visibleTop + (baselineOffset ?? layoutManager.defaultBaselineOffset(for: editorFont))
+
+            let numberString = "\(lineNumber + 1)"
+            let numberSize = numberString.size(withAttributes: attributes)
+
+            let x = gutterWidth - numberSize.width - 6
+
+            numberString.draw(at: NSPoint(x: x, y: baselineY - gutterFont.ascender), withAttributes: attributes)
+
+            charOffset += line.utf16.count + 1
+        }
     }
 }
 
@@ -47,6 +122,7 @@ final class ScratchpadViewController: NSViewController {
 
     private var editorScroll: NSScrollView!
     private(set) var textView: EditorTextView!
+    private var lineNumberView: LineNumberView!
     private var footerView: NSView!
     private var statusLabel: NSTextField!
     private var storageDot: StatusDotView!
@@ -148,8 +224,23 @@ final class ScratchpadViewController: NSViewController {
         editorScroll.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(editorScroll)
 
+        lineNumberView = LineNumberView()
+        lineNumberView.textView = textView
+        lineNumberView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(lineNumberView)
+
+        editorScroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(scrollViewDidScroll),
+            name: NSView.boundsDidChangeNotification, object: editorScroll.contentView)
+
         NSLayoutConstraint.activate([
-            editorScroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            lineNumberView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            lineNumberView.topAnchor.constraint(equalTo: view.topAnchor),
+            lineNumberView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            lineNumberView.widthAnchor.constraint(equalToConstant: 44),
+
+            editorScroll.leadingAnchor.constraint(equalTo: lineNumberView.trailingAnchor),
             editorScroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             editorScroll.topAnchor.constraint(equalTo: view.topAnchor),
             editorScroll.bottomAnchor.constraint(equalTo: footerView.topAnchor)
@@ -198,6 +289,7 @@ final class ScratchpadViewController: NSViewController {
         textView.scrollToBeginningOfDocument(nil)
         isLoadingContent = false
         resizeEditorToContent()
+        lineNumberView?.needsDisplay = true
     }
 
     private func resizeEditorToContent() {
@@ -257,6 +349,7 @@ final class ScratchpadViewController: NSViewController {
         store.beginDraft()
         textView.string = ""
         updatePlaceholder()
+        lineNumberView?.needsDisplay = true
         applyFocus(.editor)
     }
 
@@ -271,6 +364,14 @@ final class ScratchpadViewController: NSViewController {
     func flushBeforeCollapse() {
         store.flushSync()
     }
+
+    @objc private func lineNumberRedraw(_ notification: Notification?) {
+        lineNumberView?.needsDisplay = true
+    }
+
+    @objc private func scrollViewDidScroll(_ notification: Notification) {
+        lineNumberView?.needsDisplay = true
+    }
 }
 
 extension ScratchpadViewController: NSTextViewDelegate {
@@ -278,5 +379,6 @@ extension ScratchpadViewController: NSTextViewDelegate {
         resizeEditorToContent()
         guard !isLoadingContent else { return }
         store.updateCurrentText(textView.string)
+        lineNumberRedraw(nil)
     }
 }
