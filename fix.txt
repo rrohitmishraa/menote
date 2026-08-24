@@ -1,171 +1,363 @@
-PHASE 3B — FIX UNDO FOR BOLD / ITALIC ONLY
+PHASE 4 — FIND TEXT ONLY
 
-Bold and italic formatting work correctly, but ⌘Z does not undo formatting changes.
+The editor is now stable.
 
-Normal editing undo already works correctly.
+DO NOT change the existing editor architecture.
 
-DO NOT change the existing editor architecture or formatting behavior.
+Current functionality that MUST remain working:
+
+- One-note editor
+- 18pt font
+- Text wrapping
+- Vertical scrolling
+- No horizontal scrolling
+- Persistence
+- Line numbers
+- Correct line-number alignment
+- Bold
+- Italic
+- ⌘B
+- ⌘I
+- ⌘Z
+- ⇧⌘Z
+- ⌘A
+- ⌘C
+- ⌘V
+- ⌘X
+- Enter/new lines
+
+Implement ONLY a Find Text feature.
 
 ==================================================
-CURRENT BEHAVIOR
+OPENING FIND
 ==================================================
 
-Works:
+⌘F should open a small, clean native-looking Find UI.
 
-- Typing → undo works
-- Deleting → undo works
-- Enter → undo works
-- Bold → applies correctly
-- Italic → applies correctly
+It should NOT replace the editor.
 
-Broken:
+The editor remains visible underneath.
 
-- Apply Bold → ⌘Z does NOT remove the bold formatting
-- Apply Italic → ⌘Z does NOT remove the italic formatting
+Suggested appearance:
+
+┌─────────────────────────────────────┐
+│ 🔍 Find…                    2 of 7  │
+└─────────────────────────────────────┘
+
+Keep it compact and visually consistent with the existing app.
+
+Do NOT create a separate window.
+
+Do NOT create another editor.
 
 ==================================================
-ROOT CAUSE TO INVESTIGATE
+SEARCH BEHAVIOR
 ==================================================
 
-The formatting implementation is likely modifying NSTextStorage attributes directly.
+Search the current note's text.
+
+Search should happen LIVE as the user types.
+
+Example:
+
+Document:
+
+Hello world
+This is my world
+Another line
+
+Search:
+
+world
+
+Both matches should be found.
+
+The current match should be visibly selected/highlighted using native NSTextView selection behavior.
+
+Do NOT modify the actual text to highlight matches.
+
+==================================================
+KEYBOARD SHORTCUTS
+==================================================
+
+⌘F
+→ Open Find.
+
+⌘G
+→ Find next.
+
+⇧⌘G
+→ Find previous.
+
+Enter
+→ Find next while Find UI is focused.
+
+Shift + Enter
+→ Find previous.
+
+Escape
+→ Close Find UI and return focus to the editor.
+
+When Find closes, the editor should become first responder again.
+
+==================================================
+MATCH COUNTER
+==================================================
+
+Show:
+
+"2 of 7"
+
+meaning:
+
+current match = 2
+total matches = 7
+
+If there are no matches:
+
+"No matches"
+
+If the search field is empty:
+
+Do not show a match count.
+
+The counter should update immediately as the search text changes.
+
+==================================================
+SEARCH RULES
+==================================================
+
+Default search behavior:
+
+- Case-insensitive
+- Search plain visible text
+- Search across the entire current note
+- Do not modify the stored text
+- Do not modify formatting
+
+Example:
+
+Searching:
+
+hello
+
+should find:
+
+Hello
+HELLO
+hello
+
+==================================================
+SELECTION / NAVIGATION
+==================================================
+
+When a match is found:
+
+1. Select that match in the existing NSTextView.
+2. Scroll the editor so the match is visible.
+3. Keep the existing cursor/selection behavior intact.
+
+Pressing ⌘G should move:
+
+match 1
+→ match 2
+→ match 3
+→ ...
+→ match N
+→ match 1
+
+Likewise, ⇧⌘G should move backwards.
+
+If the match is below the current viewport, the existing vertical scrolling system should automatically reveal it.
+
+DO NOT implement custom scrolling.
+
+Use the existing NSTextView selection and scrolling APIs.
+
+==================================================
+FORMATTING
+==================================================
+
+Find must work with formatted text.
 
 For example:
 
-textStorage.addAttribute(...)
-textStorage.removeAttribute(...)
-textStorage.setAttributes(...)
+Hello WORLD
 
-These operations may not automatically create an undo operation in the NSTextView's undo manager.
+If "WORLD" is bold, searching "world" must still find it.
 
-Do NOT simply rebuild the editor or replace the NSTextView.
+Do NOT remove or modify bold/italic attributes.
 
-==================================================
-REQUIRED FIX
-==================================================
-
-Make Bold and Italic formatting operations participate in the SAME NSUndoManager used by NSTextView.
-
-When applying a formatting change:
-
-1. Capture the previous attributed-string attributes for the affected range.
-2. Apply the new attributes.
-3. Register an undo operation that restores the previous attributes.
-4. The undo operation must itself correctly register the inverse operation so ⇧⌘Z works.
-
-The formatting operation should behave like a normal NSTextView editing operation.
+Do NOT change formatting when selecting a match.
 
 ==================================================
-IMPORTANT
+UNDO / REDO
 ==================================================
 
-Do NOT manually manipulate the visible text.
+Searching must NOT create undo operations.
 
-Do NOT store formatting commands inside the text.
+Opening Find must NOT create an undo operation.
 
-Do NOT create a second undo manager.
+Moving between search results must NOT create undo operations.
 
-Use the NSTextView's existing undoManager.
+Closing Find must NOT create an undo operation.
 
-Do NOT break:
-
-- ⌘Z
-- ⇧⌘Z
-- typing
-- selection
-- copy/paste
-- persistence
-- line numbers
-- scrolling
-- wrapping
+The existing undo/redo stack must remain unchanged.
 
 ==================================================
-TEST EXACTLY
+PERSISTENCE
 ==================================================
 
-Test 1 — Bold
+Find must NOT affect persistence.
 
-Type:
+Searching must NOT trigger a document save.
 
-Hello World
-
-Select "Hello".
-
-Press ⌘B.
-
-Expected:
-
-Hello World
-
-with Hello bold.
-
-Press ⌘Z.
-
-Expected:
-
-Hello returns to normal.
-
-Press ⇧⌘Z.
-
-Expected:
-
-Hello becomes bold again.
-
-Test 2 — Italic
-
-Select "World".
-
-Press ⌘I.
-
-Press ⌘Z.
-
-Expected:
-
-World returns to normal.
-
-Press ⇧⌘Z.
-
-Expected:
-
-World becomes italic again.
-
-Test 3 — Multiple operations
-
-1. Bold "Hello"
-2. Italic "World"
-3. Type "!"
-4. Press ⌘Z
-
-Only "!" should be removed.
-
-Press ⌘Z again.
-
-Italic formatting should be undone.
-
-Press ⌘Z again.
-
-Bold formatting should be undone.
-
-Then use ⇧⌘Z repeatedly and verify every operation is restored in the correct order.
+Selecting a search result must NOT modify the stored document.
 
 ==================================================
-IMPORTANT
+IMPORTANT UI BEHAVIOR
 ==================================================
 
-Do not fix this with a special-case global "undo formatting" button.
+When ⌘F is pressed:
 
-⌘Z and ⇧⌘Z must work naturally through NSTextView's existing undo manager.
+- Find UI appears.
+- Search field automatically receives focus.
+- Existing editor text remains unchanged.
 
-Only fix the undo integration for Bold and Italic.
+When Escape is pressed:
 
-Build and launch the app.
+- Find UI disappears.
+- Editor regains first responder.
+- Existing selection/cursor state is restored as naturally as possible.
+
+Do NOT steal focus permanently from the editor.
+
+==================================================
+EDGE CASES
+==================================================
+
+Handle:
+
+- Empty document
+- Empty search
+- No matches
+- One match
+- Multiple matches
+- Search text longer than document
+- Search while scrolled to bottom
+- Search while text is formatted
+- Search after editing the document
+- Search after pressing Enter
+- Search after undo/redo
+- Closing and reopening Find
+
+If the document changes while Find is open, refresh the match results.
+
+==================================================
+DO NOT IMPLEMENT
+==================================================
+
+Do NOT add:
+
+- Replace
+- Replace All
+- Regular expressions
+- Case-sensitive toggle
+- Whole-word toggle
+- Search history
+- Fuzzy search
+- Multiple notes search
+- File search
+
+Keep Find deliberately simple.
+
+==================================================
+REGRESSION TEST
+==================================================
+
+Use this document:
+
+Hello world
+This is another world
+WORLD is here
+Nothing here
+Hello again
+
+Test:
+
+1. Press ⌘F.
+2. Search for:
+
+world
+
+3. Verify:
+
+1 of 3
+
+4. Press Enter.
+5. Verify:
+
+2 of 3
+
+6. Press Enter again.
+7. Verify:
+
+3 of 3
+
+8. Press Enter again.
+9. Verify it wraps back to:
+
+1 of 3
+
+10. Press Shift+Enter.
+11. Verify it moves backward.
+
+12. Press Escape.
+13. Verify Find closes.
+14. Verify editor receives keyboard input again.
+
+Then test:
+
+- ⌘G
+- ⇧⌘G
+- formatted text
+- long documents requiring vertical scrolling
+- no-match searches
+
+Finally:
+
+15. Quit.
+16. Reopen.
+17. Verify document content and formatting are unchanged.
+
+==================================================
+CRITICAL REGRESSION PROTECTION
+==================================================
+
+Do NOT modify:
+
+- NSTextView architecture
+- NSScrollView architecture
+- line-number implementation
+- persistence implementation
+- formatting implementation
+- undo manager
+- menu-bar lifecycle
+
+Use the existing editor.
+
+Do not report completion merely because the build succeeds.
+
+Actually launch the application and perform the complete test above.
 
 Report:
 
-- root cause
-- how formatting is registered with NSUndoManager
+- Find UI implementation
+- match-search implementation
+- keyboard shortcuts
 - files changed
 - build result
-- undo test result
-- redo test result
+- test results
+- confirmation that existing formatting, undo/redo, scrolling, line numbers, and persistence still work.
 
-Do not implement any other features.
+STOP AFTER FIND WORKS.

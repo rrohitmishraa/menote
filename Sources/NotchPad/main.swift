@@ -51,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(NSMenuItem.separator())
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
 
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Find…", action: #selector(ScratchpadViewController.findOpen), keyEquivalent: "f")
+        editMenu.addItem(withTitle: "Find Next", action: #selector(ScratchpadViewController.findNext), keyEquivalent: "g")
+        editMenu.addItem(withTitle: "Find Previous", action: #selector(ScratchpadViewController.findPrevious), keyEquivalent: "G")
+
         NSApp.mainMenu = mainMenu
     }
 

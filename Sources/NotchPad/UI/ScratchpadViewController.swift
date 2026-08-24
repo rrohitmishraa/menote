@@ -182,6 +182,16 @@ final class ScratchpadViewController: NSViewController {
 
     private var statusTimer: Timer?
 
+    // Find bar state
+    private var findBar: NSView!
+    private var findField: NSSearchField!
+    private var findCount: NSTextField!
+    private var isFindOpen = false
+    private var matchRanges: [NSRange] = []
+    private var currentMatchIndex = 0
+    private let findHighlightColor = NSColor(srgbRed: 1.0, green: 0.95, blue: 0.45, alpha: 0.35)
+    private let findCurrentColor = NSColor(srgbRed: 1.0, green: 0.84, blue: 0.0, alpha: 0.6)
+
     init(store: NoteStore, actions: ScratchpadActions) {
         self.store = store
         self.actions = actions
@@ -205,6 +215,7 @@ final class ScratchpadViewController: NSViewController {
         buildHeader()
         buildFooter()
         buildEditor()
+        buildFindBar()
 
         store.currentNoteChanged = { [weak self] in self?.reloadFromStore() }
         store.statusChanged = { [weak self] in self?.updateFooter() }
@@ -320,7 +331,18 @@ final class ScratchpadViewController: NSViewController {
         italicButton.refusesFirstResponder = true
         italicButton.toolTip = "Italic (⌘I)"
 
-        let stack = NSStackView(views: [boldButton, italicButton])
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.widthAnchor.constraint(equalToConstant: 8).isActive = true
+
+        let findButton = NSButton(title: "Find", target: self, action: #selector(findOpen))
+        findButton.bezelStyle = .texturedRounded
+        findButton.controlSize = .small
+        findButton.font = NSFont.systemFont(ofSize: 12)
+        findButton.refusesFirstResponder = true
+        findButton.toolTip = "Find (⌘F)"
+
+        let stack = NSStackView(views: [boldButton, italicButton, spacer, findButton])
         stack.orientation = .horizontal
         stack.spacing = 6
         stack.alignment = .centerY
@@ -352,8 +374,7 @@ final class ScratchpadViewController: NSViewController {
         ])
     }
 
-    private func buildFooter() {
-        footerView = NSView()
+    private func buildFooter() {        footerView = NSView()
         footerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(footerView)
 
@@ -383,6 +404,59 @@ final class ScratchpadViewController: NSViewController {
             footerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             footerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             footerView.heightAnchor.constraint(equalToConstant: 28)
+        ])
+    }
+
+    private func buildFindBar() {
+        findBar = NSView()
+        findBar.translatesAutoresizingMaskIntoConstraints = false
+        findBar.wantsLayer = true
+        findBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
+        findBar.layer?.cornerRadius = 8
+        findBar.layer?.borderWidth = 1
+        findBar.layer?.borderColor = NSColor.separatorColor.cgColor
+        findBar.isHidden = true
+        view.addSubview(findBar)
+
+        findCount = NSTextField(labelWithString: "")
+        findCount.font = .systemFont(ofSize: 11)
+        findCount.textColor = .secondaryLabelColor
+        findCount.alignment = .right
+
+        findField = NSSearchField()
+        findField.translatesAutoresizingMaskIntoConstraints = false
+        findField.delegate = self
+        findField.font = .systemFont(ofSize: 12)
+        findField.placeholderString = "Find"
+        findField.maximumRecents = 0
+        findField.sendsSearchStringImmediately = true
+
+        let closeButton = NSButton(title: "✕", target: self, action: #selector(closeFind))
+        closeButton.bezelStyle = .rounded
+        closeButton.controlSize = .small
+        closeButton.font = NSFont.systemFont(ofSize: 11)
+        closeButton.refusesFirstResponder = true
+        closeButton.toolTip = "Close Find (Esc)"
+
+        let stack = NSStackView(views: [findCount, findField, closeButton])
+        stack.orientation = .horizontal
+        stack.spacing = 8
+        stack.alignment = .centerY
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        findBar.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: findBar.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: findBar.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: findBar.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: findBar.bottomAnchor),
+
+            findField.widthAnchor.constraint(equalToConstant: 170),
+
+            findBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            findBar.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: 6),
+            findBar.widthAnchor.constraint(equalToConstant: 250)
         ])
     }
 
@@ -536,6 +610,7 @@ extension ScratchpadViewController: NSTextViewDelegate {
         let rtf = currentRichTextData()
         store.updateCurrentText(textView.string, richText: rtf)
         lineNumberRedraw(nil)
+        refreshMatches()
     }
 
     @objc private func toggleBold() {
@@ -544,5 +619,161 @@ extension ScratchpadViewController: NSTextViewDelegate {
 
     @objc private func toggleItalic() {
         textView.toggleTrait(.italicFontMask)
+    }
+}
+
+extension ScratchpadViewController: NSSearchFieldDelegate {
+    // MARK: - Find (menu / shortcuts)
+
+    @objc func findOpen(_ sender: Any?) {
+        isFindOpen = true
+        findBar.isHidden = false
+        view.window?.makeFirstResponder(findField)
+        runSearch()
+    }
+
+    @objc func findNext(_ sender: Any?) {
+        if !isFindOpen { findOpen(sender); return }
+        goToNextMatch()
+    }
+
+    @objc func findPrevious(_ sender: Any?) {
+        if !isFindOpen { findOpen(sender); return }
+        goToPreviousMatch()
+    }
+
+    // MARK: - Find bar behavior
+
+    private func runSearch() {
+        guard isFindOpen else { return }
+        let query = findField.stringValue
+        if query.isEmpty {
+            matchRanges.removeAll()
+            currentMatchIndex = 0
+            updateCountLabel()
+            clearHighlights()
+            return
+        }
+        matchRanges = findRanges(query: query, in: textView.string)
+        currentMatchIndex = 0
+        if let _ = matchRanges.first {
+            selectCurrentMatch()
+        } else {
+            updateCountLabel()
+            clearHighlights()
+        }
+    }
+
+    private func refreshMatches() {
+        guard isFindOpen else { return }
+        let query = findField.stringValue
+        guard !query.isEmpty else { return }
+        matchRanges = findRanges(query: query, in: textView.string)
+        if matchRanges.isEmpty {
+            currentMatchIndex = 0
+        } else {
+            currentMatchIndex = min(currentMatchIndex, matchRanges.count - 1)
+        }
+        applyHighlights()
+        updateCountLabel()
+    }
+
+    private func goToNextMatch() {
+        guard !matchRanges.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex + 1) % matchRanges.count
+        selectCurrentMatch()
+    }
+
+    private func goToPreviousMatch() {
+        guard !matchRanges.isEmpty else { return }
+        currentMatchIndex = (currentMatchIndex - 1 + matchRanges.count) % matchRanges.count
+        selectCurrentMatch()
+    }
+
+    private func selectCurrentMatch() {
+        guard matchRanges.indices.contains(currentMatchIndex) else { return }
+        applyHighlights()
+        selectRange(matchRanges[currentMatchIndex])
+        updateCountLabel()
+    }
+
+    private func applyHighlights() {
+        guard let lm = textView.layoutManager, let storage = textView.textStorage else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+        for (i, range) in matchRanges.enumerated() {
+            let color = (i == currentMatchIndex) ? findCurrentColor : findHighlightColor
+            lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: range)
+        }
+    }
+
+    private func clearHighlights() {
+        guard let lm = textView.layoutManager, let storage = textView.textStorage else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+    }
+
+    private func selectRange(_ range: NSRange) {
+        // Native selection highlight; does NOT create an undo op and does NOT save.
+        textView.setSelectedRange(range)
+        textView.scrollRangeToVisible(range)
+    }
+
+    @objc private func closeFind() {
+        isFindOpen = false
+        findBar.isHidden = true
+        matchRanges.removeAll()
+        currentMatchIndex = 0
+        clearHighlights()
+        view.window?.makeFirstResponder(textView)
+    }
+
+    private func updateCountLabel() {
+        let query = findField.stringValue
+        if query.isEmpty {
+            findCount.stringValue = ""
+        } else if matchRanges.isEmpty {
+            findCount.stringValue = "No matches"
+        } else {
+            findCount.stringValue = "\(currentMatchIndex + 1) of \(matchRanges.count)"
+        }
+    }
+
+    private func findRanges(query: String, in text: String) -> [NSRange] {
+        guard !query.isEmpty else { return [] }
+        var ranges: [NSRange] = []
+        let ns = text as NSString
+        var searchRange = NSRange(location: 0, length: ns.length)
+        while searchRange.location < ns.length {
+            let found = ns.range(of: query, options: .caseInsensitive, range: searchRange)
+            if found.location == NSNotFound { break }
+            ranges.append(found)
+            let next = NSMaxRange(found)
+            if next >= ns.length { break }
+            searchRange = NSRange(location: next, length: ns.length - next)
+        }
+        return ranges
+    }
+
+    // Live search as the user types.
+    func controlTextDidChange(_ obj: Notification) {
+        runSearch()
+    }
+
+    // Enter -> next match, Shift+Enter -> previous match, Escape -> close.
+    func control(_ control: NSControl, textView fieldEditor: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+            if shift {
+                goToPreviousMatch()
+            } else {
+                goToNextMatch()
+            }
+            return true
+        } else if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            closeFind()
+            return true
+        }
+        return false
     }
 }
