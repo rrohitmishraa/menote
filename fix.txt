@@ -1,0 +1,306 @@
+PHASE 11 — ABOUT / HELP + LAUNCH AT LOGIN
+
+MeNote is stable and feature-complete.
+
+Implement ONLY:
+
+1. About / Help page
+2. Keyboard shortcut reference
+3. Slash-command reference
+4. Launch at Login setting
+
+Do NOT modify existing editor functionality.
+
+==================================================
+1. ABOUT / HELP
+
+Add an "About MeNote…" item to the application menu.
+
+Opening it should show a small native macOS window.
+
+Keep it simple and polished.
+
+Display:
+
+MeNote
+
+Version 1.0.0
+
+A minimal menu-bar writing app.
+
+Then provide a clear "How to use MeNote" section.
+
+==================================================
+2. KEYBOARD SHORTCUTS
+
+Show the currently supported shortcuts.
+
+At minimum:
+
+⌘A    Select All
+⌘C    Copy
+⌘V    Paste
+⌘X    Cut
+⌘Z    Undo
+⇧⌘Z   Redo
+⌘B    Bold
+⌘I    Italic
+⌘F    Find
+⌘G    Next Match
+⇧⌘G   Previous Match
+⌘Q    Quit MeNote
+
+Only display shortcuts that actually work.
+
+Do NOT invent shortcuts.
+
+==================================================
+3. SLASH COMMANDS
+
+Add a section:
+
+Slash Commands
+
+/line      Insert separator
+/list      Start bullet list
+/number    Start numbered list
+
+Also explain:
+
+Type "/" at the beginning of a line or after whitespace to see command suggestions.
+
+Enter executes the selected command.
+Escape closes the suggestions.
+
+Keep this concise.
+
+==================================================
+4. TEXT FORMATTING
+
+Briefly explain:
+
+Bold
+Italic
+Text Colors
+
+For text colors, explain that the color circles in the toolbar apply a color to selected text or change the color of newly typed text.
+
+Do not create another color UI.
+
+==================================================
+5. FILES
+
+Briefly document:
+
+Open TXT
+Export TXT
+
+Explain that TXT files contain plain text and therefore do not preserve formatting such as Bold, Italic, or text colors.
+
+Do not add new file functionality.
+
+==================================================
+6. LAUNCH AT LOGIN
+
+Add:
+
+☐ Launch MeNote at login
+
+Use the native macOS mechanism appropriate for the current macOS version.
+
+Do NOT use:
+
+- shell scripts
+- LaunchAgents created manually
+- cron
+- login-item hacks
+- modifying user startup files
+
+Use the proper macOS login-item API.
+
+==================================================
+7. SETTING BEHAVIOR
+
+When enabled:
+
+MeNote should launch automatically when the user logs into macOS.
+
+Because MeNote is a menu-bar application, it should launch into the menu bar without unnecessarily opening a large window.
+
+When disabled:
+
+MeNote should no longer launch automatically.
+
+The checkbox state must reflect the actual system registration state.
+
+Do not merely store a Boolean and pretend the login item exists.
+
+==================================================
+8. PERMISSION / API COMPATIBILITY
+
+Use the correct API for the macOS deployment target.
+
+If the current deployment target supports ServiceManagement / SMAppService, prefer that.
+
+Do not use deprecated login-item mechanisms unnecessarily.
+
+If the API requires the application to be packaged in a way that differs from the current development build, explain the limitation rather than implementing a fake solution.
+
+==================================================
+9. ABOUT WINDOW DESIGN
+
+The About window should feel native.
+
+Suggested structure:
+
+             MeNote
+            Version 1.0.0
+
+      A minimal menu-bar
+         writing app.
+
+────────────────────────────
+
+Keyboard Shortcuts
+
+⌘B        Bold
+⌘I        Italic
+⌘F        Find
+⌘G        Next Match
+⇧⌘G       Previous Match
+⌘Z        Undo
+⇧⌘Z       Redo
+
+Slash Commands
+
+/line      Separator
+/list      Bullet list
+/number    Numbered list
+
+────────────────────────────
+
+☐ Launch MeNote at login
+
+Do not literally copy this ASCII layout.
+
+Use proper native AppKit layout.
+
+==================================================
+10. WINDOW BEHAVIOR
+
+The About/Help window should:
+
+- open independently from the editor popover
+- remain available while the menu-bar popover closes
+- be closable normally
+- not terminate MeNote when closed
+- not create duplicate About windows unnecessarily
+
+If the user opens About twice, bring the existing window to front instead of creating multiple copies.
+
+==================================================
+11. VISUAL STYLE
+
+Match the existing MeNote UI.
+
+Use:
+
+- native macOS fonts
+- semantic colors
+- appropriate spacing
+- subtle hierarchy
+- light/dark mode support
+
+Do NOT introduce a separate visual design language.
+
+Do NOT make it look like a website.
+
+==================================================
+12. IMPORTANT
+
+Do NOT add:
+
+- Settings window
+- General preferences
+- Themes
+- Font selector
+- Custom keyboard shortcut editor
+- Cloud settings
+- Account system
+- telemetry
+- analytics
+- extra editor features
+
+This is an About/Help surface, not a full preferences application.
+
+==================================================
+13. TESTING
+
+Test:
+
+1. Open About MeNote.
+2. Verify version is correct.
+3. Verify shortcuts are accurate.
+4. Verify slash commands are accurate.
+5. Verify TXT information is accurate.
+6. Toggle Launch at Login on.
+7. Verify the system reports MeNote as a login item.
+8. Toggle it off.
+9. Verify it is removed.
+10. Relaunch MeNote.
+11. Open About again.
+12. Verify the checkbox reflects the actual state.
+13. Test Light Mode.
+14. Test Dark Mode.
+15. Close About.
+16. Verify the editor still works normally.
+
+==================================================
+14. REGRESSION PROTECTION
+
+Do NOT break:
+
+- typing
+- scrolling
+- wrapping
+- line numbers
+- Bold
+- Italic
+- text colors
+- undo
+- redo
+- Find
+- slash commands
+- TXT import
+- TXT export
+- persistence
+- menu-bar behavior
+- ⌘Q
+- word counter
+
+==================================================
+FINAL
+
+Build the actual application.
+
+Launch the actual Release/debug build being used for development.
+
+Manually test About and Launch at Login.
+
+Do not report success based solely on compilation.
+
+Report:
+
+- files changed
+- About implementation
+- shortcut documentation
+- slash-command documentation
+- Launch at Login implementation
+- macOS API used
+- login-item verification result
+- Light/Dark mode result
+- build result
+- launch result
+- regression result
+
+STOP AFTER PHASE 11.

@@ -380,6 +380,7 @@ final class ScratchpadViewController: NSViewController {
     private var headerView: NSView!
     private var footerView: NSView!
     private var statusLabel: NSTextField!
+    private var wordCountLabel: NSTextField!
 
     private var statusTimer: Timer?
 
@@ -668,7 +669,15 @@ final class ScratchpadViewController: NSViewController {
         statusLabel.textColor = .tertiaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
 
-        let footerStack = NSStackView(views: [statusLabel])
+        wordCountLabel = NSTextField(labelWithString: "")
+        wordCountLabel.font = .systemFont(ofSize: 11)
+        wordCountLabel.textColor = .tertiaryLabelColor
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let footerStack = NSStackView(views: [statusLabel, spacer, wordCountLabel])
         footerStack.orientation = .horizontal
         footerStack.spacing = 8
         footerStack.alignment = .centerY
@@ -720,6 +729,7 @@ final class ScratchpadViewController: NSViewController {
         isLoadingContent = false
         resizeEditorToContent()
         lineNumberView?.needsDisplay = true
+        updateWordCount()
     }
 
     private func normalizeAttributedString(_ attr: NSAttributedString) -> NSAttributedString {
@@ -793,6 +803,23 @@ final class ScratchpadViewController: NSViewController {
             statusLabel.textColor = .systemRed
             statusLabel.stringValue = "⚠ \(msg)"
         }
+    }
+
+    private func updateWordCount() {
+        let text = textView.string
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            wordCountLabel.stringValue = "0 words"
+            return
+        }
+        var count = 0
+        (trimmed as NSString).enumerateSubstrings(
+            in: NSRange(location: 0, length: trimmed.utf16.count),
+            options: [.byWords]
+        ) { _, _, _, _ in
+            count += 1
+        }
+        wordCountLabel.stringValue = "\(count) word\(count == 1 ? "" : "s")"
     }
 
     private func startStatusTimer() {
@@ -1126,6 +1153,7 @@ final class ScratchpadViewController: NSViewController {
             resizeEditorToContent()
             lineNumberView?.needsDisplay = true
             refreshMatches()
+            updateWordCount()
         } catch {
             showImportError("Could not read file: \(error.localizedDescription)")
         }
@@ -1152,6 +1180,7 @@ final class ScratchpadViewController: NSViewController {
 extension ScratchpadViewController: NSTextViewDelegate {
     func textDidChange(_ notification: Notification) {
         resizeEditorToContent()
+        updateWordCount()
         guard !isLoadingContent else { return }
         let rtf = currentRichTextData()
         store.updateCurrentText(textView.string, richText: rtf)
