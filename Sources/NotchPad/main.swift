@@ -29,11 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
 
-        appMenu.addItem(withTitle: "About menote", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About MeNote", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences…", action: #selector(showPreferences), keyEquivalent: ",")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Quit menote", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit MeNote", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // File menu
         let fileMenuItem = NSMenuItem()

@@ -128,7 +128,26 @@ final class HoverButton: NSButton {
 final class EditorTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
 
+    var interceptNewline: (() -> Bool)?
+    var onEscape: (() -> Bool)?
+    var onArrowKey: ((NSEvent) -> Bool)?
+
     private let baseFont: NSFont = .systemFont(ofSize: 18)
+
+    override func insertNewline(_ sender: Any?) {
+        if interceptNewline?() == true { return }
+        super.insertNewline(sender)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            if onEscape?() == true { return }
+        }
+        if event.keyCode == 125 || event.keyCode == 126 {
+            if onArrowKey?(event) == true { return }
+        }
+        super.keyDown(with: event)
+    }
 
     func toggleTrait(_ trait: NSFontTraitMask) {
         let manager = NSFontManager.shared
@@ -168,33 +187,6 @@ final class EditorTextView: NSTextView {
         needsDisplay = true
     }
 
-    // Drag & drop support for .txt files
-    var onFileDrop: ((URL) -> Void)?
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if hasValidTXTFile(sender) {
-            return .copy
-        }
-        return []
-    }
-
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let urls = sender.draggingPasteboard.propertyList(forType: .fileURL) as? [String],
-              let url = urls.first else { return false }
-
-        let fileURL = URL(fileURLWithPath: url)
-        guard fileURL.pathExtension.lowercased() == "txt" else { return false }
-
-        onFileDrop?(fileURL)
-        return true
-    }
-
-    private func hasValidTXTFile(_ sender: NSDraggingInfo) -> Bool {
-        guard let urls = sender.draggingPasteboard.propertyList(forType: .fileURL) as? [String],
-              let urlString = urls.first else { return false }
-        return (urlString as NSString).pathExtension.lowercased() == "txt"
-    }
-
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
            let chars = event.charactersIgnoringModifiers?.lowercased() {
@@ -205,6 +197,167 @@ final class EditorTextView: NSTextView {
             }
         }
         return super.performKeyEquivalent(with: event)
+    }
+}
+
+private class CommandRow: NSView {
+    var commandIndex: Int = 0
+}
+
+final class SlashCommandPopup: NSObject {
+    private var panel: NSPanel?
+    private var listView: NSStackView?
+    private(set) var selectedIndex = 0
+    private(set) var items: [(command: String, description: String)] = []
+    private var onExecute: ((String) -> Void)?
+
+    private let commands: [(command: String, description: String)] = [
+        ("/line", "Separator"),
+        ("/list", "Bullet list"),
+        ("/number", "Numbered list")
+    ]
+
+    func show(for text: String, at rect: NSRect, in clipView: NSClipView, onExecute: @escaping (String) -> Void) {
+        self.onExecute = onExecute
+        let query = text.lowercased()
+        items = commands.filter { $0.command.hasPrefix(query) }
+        guard !items.isEmpty else { hide(); return }
+        selectedIndex = 0
+        buildPanel(at: rect, in: clipView)
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+        panel = nil
+        listView = nil
+    }
+
+    var isShown: Bool { panel?.isVisible ?? false }
+
+    func selectNext() {
+        guard !items.isEmpty else { return }
+        selectedIndex = (selectedIndex + 1) % items.count
+        highlightSelection()
+    }
+
+    func selectPrevious() {
+        guard !items.isEmpty else { return }
+        selectedIndex = (selectedIndex - 1 + items.count) % items.count
+        highlightSelection()
+    }
+
+    func executeSelected() {
+        guard items.indices.contains(selectedIndex) else { return }
+        let cmd = items[selectedIndex].command
+        hide()
+        onExecute?(cmd)
+    }
+
+    private func buildPanel(at cursorRect: NSRect, in clipView: NSClipView) {
+        panel?.orderOut(nil)
+
+        let panelWidth: CGFloat = 180
+        let rowHeight: CGFloat = 24
+        let panelHeight = CGFloat(items.count) * rowHeight + 8
+
+        let globalPoint = clipView.window?.contentView?.convert(cursorRect.origin, from: clipView) ?? .zero
+        var panelOrigin = clipView.window?.convertToScreen(NSRect(origin: globalPoint, size: .zero)).origin ?? .zero
+        panelOrigin.y -= panelHeight + 4
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: panelOrigin, size: NSSize(width: panelWidth, height: panelHeight)),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95)
+        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.popUpMenuWindow)))
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        panel.isMovableByWindowBackground = false
+        panel.hasShadow = true
+
+        let container = NSVisualEffectView()
+        container.material = .popover
+        container.blendingMode = .behindWindow
+        container.state = .active
+        container.wantsLayer = true
+        container.layer?.cornerRadius = 8
+        container.layer?.masksToBounds = true
+        container.frame = panel.contentView!.bounds
+        container.autoresizingMask = [.width, .height]
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        for (i, item) in items.enumerated() {
+            let row = CommandRow()
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.heightAnchor.constraint(equalToConstant: rowHeight).isActive = true
+            row.widthAnchor.constraint(equalToConstant: panelWidth - 8).isActive = true
+
+            let cmdLabel = NSTextField(labelWithString: item.command)
+            cmdLabel.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
+            cmdLabel.textColor = .labelColor
+            cmdLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            let descLabel = NSTextField(labelWithString: item.description)
+            descLabel.font = NSFont.systemFont(ofSize: 11)
+            descLabel.textColor = .tertiaryLabelColor
+            descLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            row.addSubview(cmdLabel)
+            row.addSubview(descLabel)
+
+            NSLayoutConstraint.activate([
+                cmdLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 8),
+                cmdLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                descLabel.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -8),
+                descLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor)
+            ])
+
+            let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(rowClicked(_:)))
+            row.addGestureRecognizer(clickGesture)
+            row.commandIndex = i
+
+            stack.addArrangedSubview(row)
+        }
+
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+        ])
+
+        panel.contentView = container
+        self.panel = panel
+        self.listView = stack
+        highlightSelection()
+        panel.orderFront(nil)
+    }
+
+    private func highlightSelection() {
+        guard let stack = listView else { return }
+        for (i, subview) in stack.arrangedSubviews.enumerated() {
+            subview.wantsLayer = true
+            if i == selectedIndex {
+                subview.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
+            } else {
+                subview.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+    }
+
+    @objc private func rowClicked(_ sender: NSGestureRecognizer) {
+        guard let row = sender.view as? CommandRow else { return }
+        selectedIndex = row.commandIndex
+        executeSelected()
     }
 }
 
@@ -229,6 +382,16 @@ final class ScratchpadViewController: NSViewController {
     private var statusLabel: NSTextField!
 
     private var statusTimer: Timer?
+
+    // Slash commands
+    private let slashPopup = SlashCommandPopup()
+    private var isInList = false
+    private var listPrefix = ""
+
+    // Color palette
+    private var colorStrip: NSStackView!
+    private let defaultTextColor: NSColor = .labelColor
+    private let colorValues: [NSColor?] = [nil, .systemRed, .systemOrange, .systemYellow, .systemGreen, .systemBlue, .systemPurple]
 
     // Find bar state
     private var findControls: NSStackView!
@@ -266,6 +429,7 @@ final class ScratchpadViewController: NSViewController {
         buildHeader()
         buildFooter()
         buildEditor()
+        updateColorStripButtons()
 
         store.currentNoteChanged = { [weak self] in self?.reloadFromStore() }
         store.statusChanged = { [weak self] in self?.updateFooter() }
@@ -328,6 +492,24 @@ final class ScratchpadViewController: NSViewController {
         textView.delegate = self
         textView.setAccessibilityIdentifier("editor-text")
 
+        textView.interceptNewline = { [weak self] in
+            self?.handleNewline() ?? false
+        }
+        textView.onEscape = { [weak self] in
+            guard let self, self.slashPopup.isShown else { return false }
+            self.slashPopup.hide()
+            return true
+        }
+        textView.onArrowKey = { [weak self] event in
+            guard let self, self.slashPopup.isShown else { return false }
+            if event.keyCode == 125 {
+                self.slashPopup.selectNext()
+            } else if event.keyCode == 126 {
+                self.slashPopup.selectPrevious()
+            }
+            return true
+        }
+
         editorScroll = NSScrollView()
         editorScroll.hasVerticalScroller = true
         editorScroll.hasHorizontalScroller = false
@@ -348,10 +530,6 @@ final class ScratchpadViewController: NSViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(scrollViewDidScroll),
             name: NSView.boundsDidChangeNotification, object: editorScroll.contentView)
-
-        // Drag & drop support for .txt files
-        textView.registerForDraggedTypes([.fileURL])
-        textView.onFileDrop = { [weak self] url in self?.loadTXTFromURL(url) }
 
         NSLayoutConstraint.activate([
             lineNumberView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -403,7 +581,20 @@ final class ScratchpadViewController: NSViewController {
             title: "I", target: self, action: #selector(toggleItalic), tooltip: "Italic (⌘I)")
         italicButton.font = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 13), toHaveTrait: .italicFontMask)
 
-        let leftStack = NSStackView(views: [openButton, exportButton, boldButton, italicButton])
+        colorStrip = NSStackView()
+        colorStrip.orientation = .horizontal
+        colorStrip.spacing = 4
+        colorStrip.alignment = .centerY
+        colorStrip.translatesAutoresizingMaskIntoConstraints = false
+
+        for (i, color) in colorValues.enumerated() {
+            let btn = NSButton(image: Self.circleImage(color: color ?? defaultTextColor, selected: false), target: self, action: #selector(colorStripButtonClicked(_:)))
+            btn.isBordered = false
+            btn.tag = i
+            colorStrip.addArrangedSubview(btn)
+        }
+
+        let leftStack = NSStackView(views: [openButton, exportButton, boldButton, italicButton, colorStrip])
         leftStack.orientation = .horizontal
         leftStack.spacing = 4
         leftStack.alignment = .centerY
@@ -641,6 +832,235 @@ final class ScratchpadViewController: NSViewController {
         store.flushSync()
     }
 
+    // MARK: - Slash Commands
+
+    private func currentLineRange() -> NSRange {
+        let ns = textView.string as NSString
+        let cursor = textView.selectedRange().location
+        let lineStart = ns.lineRange(for: NSRange(location: cursor, length: 0)).location
+        let lineEnd: Int
+        if cursor < ns.length {
+            lineEnd = ns.lineRange(for: NSRange(location: cursor, length: 0)).upperBound
+        } else {
+            lineEnd = ns.length
+        }
+        return NSRange(location: lineStart, length: lineEnd - lineStart)
+    }
+
+    private func currentLineText() -> String {
+        let ns = textView.string as NSString
+        let range = currentLineRange()
+        return ns.substring(with: range).trimmingCharacters(in: .newlines)
+    }
+
+    private func handleNewline() -> Bool {
+        if slashPopup.isShown {
+            slashPopup.executeSelected()
+            return true
+        }
+
+        let line = currentLineText()
+
+        if let cmd = slashCommand(in: line) {
+            executeSlashCommand(cmd)
+            return true
+        }
+
+        if isInList {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty || line == listPrefix {
+                exitList()
+                return true
+            }
+            continueList()
+            return true
+        }
+
+        return false
+    }
+
+    private func slashCommand(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let known = ["/line", "/list", "/number"]
+        if known.contains(trimmed) { return trimmed }
+        return nil
+    }
+
+    private func executeSlashCommand(_ command: String) {
+        let lineRange = currentLineRange()
+        textView.undoManager?.beginUndoGrouping()
+
+        switch command {
+        case "/line":
+            let separator = String(repeating: "=", count: 30)
+            textView.replaceCharacters(in: lineRange, with: separator)
+            isInList = false
+            listPrefix = ""
+
+        case "/list":
+            let bullet = "• "
+            textView.replaceCharacters(in: lineRange, with: bullet)
+            isInList = true
+            listPrefix = bullet
+            let cursor = lineRange.location + (bullet as NSString).length
+            textView.setSelectedRange(NSRange(location: cursor, length: 0))
+
+        case "/number":
+            let numbered = "1. "
+            textView.replaceCharacters(in: lineRange, with: numbered)
+            isInList = true
+            listPrefix = numbered
+            let cursor = lineRange.location + (numbered as NSString).length
+            textView.setSelectedRange(NSRange(location: cursor, length: 0))
+
+        default:
+            break
+        }
+
+        textView.undoManager?.endUndoGrouping()
+        slashPopup.hide()
+        resizeEditorToContent()
+        lineNumberView?.needsDisplay = true
+        notifyTextChange()
+    }
+
+    private func continueList() {
+        let ns = textView.string as NSString
+        let cursor = textView.selectedRange().location
+        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+
+        var nextPrefix: String
+        if listPrefix.hasPrefix("• ") {
+            nextPrefix = "• "
+        } else if listPrefix.first?.isNumber == true {
+            let numStr = String(listPrefix.prefix(while: { $0 != "." }))
+            if let num = Int(numStr) {
+                nextPrefix = "\(num + 1). "
+            } else {
+                nextPrefix = "1. "
+            }
+        } else {
+            nextPrefix = listPrefix
+        }
+
+        let lineStr = ns.substring(with: lineRange)
+        let hasTrailingNewline = lineStr.hasSuffix("\n")
+        let insertText = hasTrailingNewline ? nextPrefix : "\n" + nextPrefix
+        let insertPos = lineRange.upperBound
+        textView.undoManager?.beginUndoGrouping()
+        textView.replaceCharacters(in: NSRange(location: insertPos, length: 0), with: insertText)
+        textView.undoManager?.endUndoGrouping()
+        listPrefix = nextPrefix
+
+        let newCursor = insertPos + (insertText as NSString).length
+        textView.setSelectedRange(NSRange(location: newCursor, length: 0))
+        resizeEditorToContent()
+        lineNumberView?.needsDisplay = true
+        notifyTextChange()
+    }
+
+    private func exitList() {
+        let ns = textView.string as NSString
+        let cursor = textView.selectedRange().location
+        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+
+        textView.undoManager?.beginUndoGrouping()
+        textView.replaceCharacters(in: lineRange, with: "")
+        textView.undoManager?.endUndoGrouping()
+
+        isInList = false
+        listPrefix = ""
+        textView.setSelectedRange(NSRange(location: lineRange.location, length: 0))
+        resizeEditorToContent()
+        lineNumberView?.needsDisplay = true
+        notifyTextChange()
+    }
+
+    private func notifyTextChange() {
+        guard !isLoadingContent else { return }
+        let rtf = currentRichTextData()
+        store.updateCurrentText(textView.string, richText: rtf)
+    }
+
+    func showSlashAutocomplete() {
+        let ns = textView.string as NSString
+        let cursor = textView.selectedRange().location
+        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+        let lineText = ns.substring(with: lineRange).trimmingCharacters(in: .newlines)
+        let relativeCursor = cursor - lineRange.location
+        let typedSoFar = String(lineText.prefix(relativeCursor))
+
+        guard typedSoFar.hasPrefix("/") else { slashPopup.hide(); return }
+
+        guard let lm = textView.layoutManager, let tc = textView.textContainer,
+              let clipView = textView.enclosingScrollView?.contentView else { return }
+
+        let glyphRange = lm.glyphRange(forCharacterRange: NSRange(location: cursor, length: 0), actualCharacterRange: nil)
+        let glyphRect = lm.boundingRect(forGlyphRange: glyphRange, in: tc)
+        let inset = textView.textContainerInset
+
+        let popupRect = NSRect(
+            x: glyphRect.origin.x + inset.width,
+            y: glyphRect.origin.y + inset.height,
+            width: max(glyphRect.width, 40),
+            height: glyphRect.height
+        )
+        let clipRect = textView.convert(popupRect, to: clipView)
+
+        slashPopup.show(for: typedSoFar, at: clipRect, in: clipView) { [weak self] command in
+            self?.executeSlashCommand(command)
+        }
+    }
+
+    // MARK: - Text Color
+
+    @objc private func colorStripButtonClicked(_ sender: NSButton) {
+        let color = sender.tag == 0 ? nil : colorValues[sender.tag]
+        applyColor(color)
+    }
+
+    private func applyColor(_ color: NSColor?) {
+        let resolvedColor = color ?? defaultTextColor
+        let selectedRange = textView.selectedRange()
+
+        if selectedRange.length > 0 {
+            if textView.shouldChangeText(in: selectedRange, replacementString: nil) {
+                textView.textStorage?.beginEditing()
+                textView.textStorage?.addAttribute(.foregroundColor, value: resolvedColor, range: selectedRange)
+                textView.textStorage?.endEditing()
+                textView.didChangeText()
+            }
+        } else {
+            textView.typingAttributes[.foregroundColor] = resolvedColor
+        }
+
+        updateColorStripButtons()
+    }
+
+    private func updateColorStripButtons() {
+        let currentColor = textView?.typingAttributes[.foregroundColor] as? NSColor
+        for (i, btn) in colorStrip.arrangedSubviews.enumerated() {
+            guard let btn = btn as? NSButton else { continue }
+            let isSelected = (i == 0 && currentColor == nil) || (i > 0 && currentColor == colorValues[i])
+            btn.image = Self.circleImage(color: colorValues[i] ?? defaultTextColor, selected: isSelected)
+        }
+    }
+
+    private static func circleImage(color: NSColor, selected: Bool) -> NSImage {
+        let size = NSSize(width: 14, height: 14)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
+            color.setFill()
+            circle.fill()
+            if selected {
+                NSColor.white.setStroke()
+                circle.lineWidth = 2
+                circle.stroke()
+            }
+            return true
+        }
+        return image
+    }
+
     // MARK: - TXT Export / Import
 
     @objc func exportAsTXT() {
@@ -737,6 +1157,17 @@ extension ScratchpadViewController: NSTextViewDelegate {
         store.updateCurrentText(textView.string, richText: rtf)
         lineNumberRedraw(nil)
         refreshMatches()
+
+        let ns = textView.string as NSString
+        let cursor = textView.selectedRange().location
+        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+        let lineText = ns.substring(with: lineRange).trimmingCharacters(in: .newlines)
+
+        if lineText.hasPrefix("/") && !lineText.contains(" ") {
+            showSlashAutocomplete()
+        } else {
+            slashPopup.hide()
+        }
     }
 
     @objc private func toggleBold() {

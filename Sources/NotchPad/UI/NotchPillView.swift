@@ -62,7 +62,7 @@ final class NotchPillView: NSView {
     }
 
     override func accessibilityLabel() -> String? {
-        "Open menote scratchpad"
+        "Open MeNote"
     }
 
     override func isAccessibilityElement() -> Bool { true }

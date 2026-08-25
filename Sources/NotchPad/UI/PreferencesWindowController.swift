@@ -16,7 +16,7 @@ final class PreferencesWindowController: NSWindowController {
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 620),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered, defer: false)
-        w.title = "menote Settings"
+        w.title = "MeNote Settings"
         w.center()
         w.setAccessibilityIdentifier("preferences-window")
         self.window = w
@@ -158,7 +158,7 @@ final class PreferencesWindowController: NSWindowController {
 
         stack.addArrangedSubview(sectionHeader("General"))
 
-        let launchBtn = NSButton(checkboxWithTitle: "Launch menote at Login", target: self, action: #selector(launchAtLoginChanged(_:)))
+        let launchBtn = NSButton(checkboxWithTitle: "Launch MeNote at Login", target: self, action: #selector(launchAtLoginChanged(_:)))
         launchBtn.state = coordinator.settings.launchAtLogin ? .on : .off
         if !LaunchAtLoginManager.isSupported {
             launchBtn.isEnabled = false
@@ -206,11 +206,11 @@ final class PreferencesWindowController: NSWindowController {
         stack.addArrangedSubview(sectionHeader("About"))
 
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
-        let versionLabel = NSTextField(labelWithString: "menote \(version)")
+        let versionLabel = NSTextField(labelWithString: "MeNote \(version)")
         versionLabel.font = .systemFont(ofSize: 12, weight: .medium)
         stack.addArrangedSubview(versionLabel)
 
-        let privacy = NSTextField(wrappingLabelWithString: "menote is fully offline. Your notes, images, and clipboard history never leave this Mac. No analytics. No tracking.")
+        let privacy = NSTextField(wrappingLabelWithString: "MeNote is fully offline. Your notes, images, and clipboard history never leave this Mac. No analytics. No tracking.")
         privacy.font = .systemFont(ofSize: 11)
         privacy.textColor = .secondaryLabelColor
         privacy.preferredMaxLayoutWidth = 480

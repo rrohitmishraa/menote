@@ -10,7 +10,7 @@ enum StorageUnavailableAlert {
         let alert = NSAlert()
         alert.messageText = "Storage Unavailable"
         alert.informativeText = """
-            menote cannot access its storage location:
+            MeNote cannot access its storage location:
             
             \(reason)
             
