@@ -91,20 +91,42 @@ final class LineNumberView: NSView {
     }
 }
 
+final class HoverButton: NSButton {
+    private var isHovering = false
+    private var trackingArea: NSTrackingArea?
+
+    override var acceptsFirstResponder: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea { removeTrackingArea(existing) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovering {
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4)
+            NSColor.controlAccentColor.withAlphaComponent(0.15).setFill()
+            path.fill()
+        }
+        super.draw(dirtyRect)
+    }
+}
+
 final class EditorTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-
-        guard string.isEmpty else { return }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.placeholderTextColor,
-            .font: NSFont.systemFont(ofSize: 18)
-        ]
-        let placeholder = "Start typing…"
-        let rect = textContainerInset
-        (placeholder as NSString).draw(at: NSPoint(x: rect.width, y: rect.height + 2), withAttributes: attrs)
-    }
 
     private let baseFont: NSFont = .systemFont(ofSize: 18)
 
@@ -146,6 +168,33 @@ final class EditorTextView: NSTextView {
         needsDisplay = true
     }
 
+    // Drag & drop support for .txt files
+    var onFileDrop: ((URL) -> Void)?
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if hasValidTXTFile(sender) {
+            return .copy
+        }
+        return []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.propertyList(forType: .fileURL) as? [String],
+              let url = urls.first else { return false }
+
+        let fileURL = URL(fileURLWithPath: url)
+        guard fileURL.pathExtension.lowercased() == "txt" else { return false }
+
+        onFileDrop?(fileURL)
+        return true
+    }
+
+    private func hasValidTXTFile(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.propertyList(forType: .fileURL) as? [String],
+              let urlString = urls.first else { return false }
+        return (urlString as NSString).pathExtension.lowercased() == "txt"
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
            let chars = event.charactersIgnoringModifiers?.lowercased() {
@@ -178,7 +227,6 @@ final class ScratchpadViewController: NSViewController {
     private var headerView: NSView!
     private var footerView: NSView!
     private var statusLabel: NSTextField!
-    private var storageDot: StatusDotView!
 
     private var statusTimer: Timer?
 
@@ -208,9 +256,11 @@ final class ScratchpadViewController: NSViewController {
         root.blendingMode = .behindWindow
         root.state = .active
         root.wantsLayer = true
-        root.layer?.cornerRadius = 12
+        root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.cornerCurve = .continuous
+        root.layer?.borderWidth = 0.5
+        root.layer?.borderColor = NSColor.separatorColor.cgColor
         view = root
 
         buildHeader()
@@ -266,7 +316,7 @@ final class ScratchpadViewController: NSViewController {
         textView.isEditable = true
         textView.isSelectable = true
         textView.backgroundColor = .clear
-        textView.textContainerInset = NSSize(width: 24, height: 20)
+        textView.textContainerInset = NSSize(width: 28, height: 24)
         textView.typingAttributes = [
             .foregroundColor: NSColor.labelColor,
             .font: NSFont.systemFont(ofSize: 18)
@@ -299,6 +349,10 @@ final class ScratchpadViewController: NSViewController {
             self, selector: #selector(scrollViewDidScroll),
             name: NSView.boundsDidChangeNotification, object: editorScroll.contentView)
 
+        // Drag & drop support for .txt files
+        textView.registerForDraggedTypes([.fileURL])
+        textView.onFileDrop = { [weak self] url in self?.loadTXTFromURL(url) }
+
         NSLayoutConstraint.activate([
             lineNumberView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             lineNumberView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
@@ -312,34 +366,50 @@ final class ScratchpadViewController: NSViewController {
         ])
     }
 
+    private func makeToolbarButton(title: String? = nil, image: NSImage? = nil, target: AnyObject, action: Selector, tooltip: String) -> NSButton {
+        let button: HoverButton
+        if let image {
+            button = HoverButton(image: image, target: target, action: action)
+            button.imagePosition = .imageOnly
+        } else {
+            button = HoverButton(title: title ?? "", target: target, action: action)
+        }
+        button.bezelStyle = .texturedRounded
+        button.controlSize = .small
+        button.isBordered = false
+        button.refusesFirstResponder = true
+        button.toolTip = tooltip
+        return button
+    }
+
     private func buildHeader() {
         headerView = NSView()
         headerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(headerView)
 
-        let boldButton = NSButton(title: "B", target: self, action: #selector(toggleBold))
-        boldButton.bezelStyle = .texturedRounded
-        boldButton.controlSize = .small
+        let openButton = makeToolbarButton(
+            image: NSImage(systemSymbolName: "doc", accessibilityDescription: "Open TXT")!,
+            target: self, action: #selector(openTXT), tooltip: "Open TXT (⌘O)")
+
+        let exportButton = makeToolbarButton(
+            image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export TXT")!,
+            target: self, action: #selector(exportAsTXT), tooltip: "Export as TXT (⌘E)")
+
+        let boldButton = makeToolbarButton(
+            title: "B", target: self, action: #selector(toggleBold), tooltip: "Bold (⌘B)")
         boldButton.font = NSFont.boldSystemFont(ofSize: 13)
-        boldButton.refusesFirstResponder = true
-        boldButton.toolTip = "Bold (⌘B)"
 
-        let italicButton = NSButton(title: "I", target: self, action: #selector(toggleItalic))
-        italicButton.bezelStyle = .texturedRounded
-        italicButton.controlSize = .small
+        let italicButton = makeToolbarButton(
+            title: "I", target: self, action: #selector(toggleItalic), tooltip: "Italic (⌘I)")
         italicButton.font = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 13), toHaveTrait: .italicFontMask)
-        italicButton.refusesFirstResponder = true
-        italicButton.toolTip = "Italic (⌘I)"
 
-        let stack = NSStackView(views: [boldButton, italicButton])
-        stack.orientation = .horizontal
-        stack.spacing = 6
-        stack.alignment = .centerY
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 0)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        headerView.addSubview(stack)
+        let leftStack = NSStackView(views: [openButton, exportButton, boldButton, italicButton])
+        leftStack.orientation = .horizontal
+        leftStack.spacing = 4
+        leftStack.alignment = .centerY
+        leftStack.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(leftStack)
 
-        // Find controls, anchored to the right edge of the header (not over the text).
         findField = NSSearchField()
         findField.translatesAutoresizingMaskIntoConstraints = false
         findField.delegate = self
@@ -351,29 +421,23 @@ final class ScratchpadViewController: NSViewController {
 
         findCount = NSTextField(labelWithString: "")
         findCount.font = .systemFont(ofSize: 11)
-        findCount.textColor = .secondaryLabelColor
+        findCount.textColor = .tertiaryLabelColor
 
         let findControls = NSStackView(views: [findCount, findField])
         findControls.orientation = .horizontal
-        findControls.spacing = 8
+        findControls.spacing = 6
         findControls.alignment = .centerY
         findControls.isHidden = true
         self.findControls = findControls
 
-        findIconButton = NSButton(
+        findIconButton = makeToolbarButton(
             image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find")!,
-            target: self, action: #selector(toggleFind))
-        findIconButton.bezelStyle = .texturedRounded
-        findIconButton.controlSize = .small
-        findIconButton.imagePosition = .imageOnly
-        findIconButton.refusesFirstResponder = true
-        findIconButton.toolTip = "Find (⌘F)"
+            target: self, action: #selector(toggleFind), tooltip: "Find (⌘F)")
 
         let rightStack = NSStackView(views: [findControls, findIconButton])
         rightStack.orientation = .horizontal
-        rightStack.spacing = 8
+        rightStack.spacing = 6
         rightStack.alignment = .centerY
-        rightStack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 12)
         rightStack.translatesAutoresizingMaskIntoConstraints = false
         headerView.addSubview(rightStack)
 
@@ -384,14 +448,12 @@ final class ScratchpadViewController: NSViewController {
         headerView.addSubview(separator)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: rightStack.leadingAnchor, constant: -12),
-            stack.topAnchor.constraint(equalTo: headerView.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: separator.topAnchor),
+            leftStack.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 10),
+            leftStack.trailingAnchor.constraint(lessThanOrEqualTo: rightStack.leadingAnchor, constant: -8),
+            leftStack.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
 
-            rightStack.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
-            rightStack.topAnchor.constraint(equalTo: headerView.topAnchor),
-            rightStack.bottomAnchor.constraint(equalTo: separator.topAnchor),
+            rightStack.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -10),
+            rightStack.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
 
             separator.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
@@ -401,40 +463,49 @@ final class ScratchpadViewController: NSViewController {
             headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             headerView.topAnchor.constraint(equalTo: view.topAnchor),
-            headerView.heightAnchor.constraint(equalToConstant: 34)
+            headerView.heightAnchor.constraint(equalToConstant: 32)
         ])
     }
 
-    private func buildFooter() {        footerView = NSView()
+    private func buildFooter() {
+        footerView = NSView()
         footerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(footerView)
 
         statusLabel = NSTextField(labelWithString: "")
         statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.textColor = .tertiaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
 
-        storageDot = StatusDotView()
-        storageDot.translatesAutoresizingMaskIntoConstraints = false
-
-        let footerStack = NSStackView(views: [statusLabel, NSView(), storageDot])
+        let footerStack = NSStackView(views: [statusLabel])
         footerStack.orientation = .horizontal
         footerStack.spacing = 8
         footerStack.alignment = .centerY
-        footerStack.edgeInsets = NSEdgeInsets(top: 6, left: 16, bottom: 6, right: 16)
+        footerStack.edgeInsets = NSEdgeInsets(top: 4, left: 16, bottom: 4, right: 16)
         footerStack.translatesAutoresizingMaskIntoConstraints = false
         footerView.addSubview(footerStack)
 
+        let separator = NSView()
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        footerView.addSubview(separator)
+
         NSLayoutConstraint.activate([
+            separator.leadingAnchor.constraint(equalTo: footerView.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: footerView.trailingAnchor),
+            separator.topAnchor.constraint(equalTo: footerView.topAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+
             footerStack.leadingAnchor.constraint(equalTo: footerView.leadingAnchor),
             footerStack.trailingAnchor.constraint(equalTo: footerView.trailingAnchor),
-            footerStack.topAnchor.constraint(equalTo: footerView.topAnchor),
+            footerStack.topAnchor.constraint(equalTo: separator.bottomAnchor),
             footerStack.bottomAnchor.constraint(equalTo: footerView.bottomAnchor),
 
             footerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             footerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             footerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            footerView.heightAnchor.constraint(equalToConstant: 28)
+            footerView.heightAnchor.constraint(equalToConstant: 24)
         ])
     }
 
@@ -519,20 +590,18 @@ final class ScratchpadViewController: NSViewController {
     private func updateFooter() {
         switch store.saveStatus {
         case .idle:
-            statusLabel.textColor = .secondaryLabelColor
+            statusLabel.textColor = .tertiaryLabelColor
             statusLabel.stringValue = "Ready"
         case .saving:
-            statusLabel.textColor = .secondaryLabelColor
+            statusLabel.textColor = .tertiaryLabelColor
             statusLabel.stringValue = "Saving…"
         case .saved(let date):
-            statusLabel.textColor = .secondaryLabelColor
+            statusLabel.textColor = .tertiaryLabelColor
             statusLabel.stringValue = "Saved \(Theme.formatSavedDate(date))"
         case .failed(let msg):
             statusLabel.textColor = .systemRed
             statusLabel.stringValue = "⚠ \(msg)"
         }
-        let available = store.isStorageAvailable
-        storageDot.color = available ? .systemGreen : .systemRed
     }
 
     private func startStatusTimer() {
@@ -570,6 +639,85 @@ final class ScratchpadViewController: NSViewController {
 
     func flushBeforeCollapse() {
         store.flushSync()
+    }
+
+    // MARK: - TXT Export / Import
+
+    @objc func exportAsTXT() {
+        let text = textView.string
+        guard !text.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "note.txt"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        panel.begin { [weak self] result in
+            guard result == .OK, let url = panel.url else { return }
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                self?.showImportError("Could not export: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc func openTXT() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.isExtensionHidden = false
+        panel.message = "Select a text file to open. The current note will be replaced."
+
+        panel.begin { [weak self] result in
+            guard result == .OK, let url = panel.url else { return }
+            self?.loadTXTFromURL(url)
+        }
+    }
+
+    private func loadTXTFromURL(_ url: URL) {
+        guard textView.string.isEmpty || store.currentNoteID == nil else {
+            let alert = NSAlert()
+            alert.messageText = "Open this text file?"
+            alert.informativeText = "Your current note will be replaced."
+            alert.addButton(withTitle: "Open")
+            alert.addButton(withTitle: "Cancel")
+            alert.alertStyle = .warning
+
+            if alert.runModal() == .alertFirstButtonReturn {
+                performTXTImport(from: url)
+            }
+            return
+        }
+        performTXTImport(from: url)
+    }
+
+    private func performTXTImport(from url: URL) {
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            textView.undoManager?.beginUndoGrouping()
+            textView.selectAll(nil)
+            textView.insertText(text, replacementRange: textView.selectedRange())
+            textView.undoManager?.endUndoGrouping()
+            textView.scrollToBeginningOfDocument(nil)
+            resizeEditorToContent()
+            lineNumberView?.needsDisplay = true
+            refreshMatches()
+        } catch {
+            showImportError("Could not read file: \(error.localizedDescription)")
+        }
+    }
+
+    private func showImportError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Import Error"
+        alert.informativeText = message
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func lineNumberRedraw(_ notification: Notification?) {

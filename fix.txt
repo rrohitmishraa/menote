@@ -1,363 +1,306 @@
-PHASE 4 — FIND TEXT ONLY
+PHASE 6C — FINAL RELIABILITY AND EDGE-CASE PASS
 
-The editor is now stable.
+The UI is now visually polished.
 
-DO NOT change the existing editor architecture.
+DO NOT redesign the UI.
 
-Current functionality that MUST remain working:
+DO NOT add new features.
 
-- One-note editor
-- 18pt font
-- Text wrapping
-- Vertical scrolling
-- No horizontal scrolling
-- Persistence
-- Line numbers
-- Correct line-number alignment
-- Bold
-- Italic
-- ⌘B
-- ⌘I
-- ⌘Z
-- ⇧⌘Z
-- ⌘A
-- ⌘C
-- ⌘V
-- ⌘X
-- Enter/new lines
+DO NOT change the current visual layout unless fixing an actual bug.
 
-Implement ONLY a Find Text feature.
+The goal of this phase is to make sure the existing application is reliable in real-world use.
 
 ==================================================
-OPENING FIND
+1. EDITOR INPUT
 ==================================================
 
-⌘F should open a small, clean native-looking Find UI.
+Verify:
 
-It should NOT replace the editor.
-
-The editor remains visible underneath.
-
-Suggested appearance:
-
-┌─────────────────────────────────────┐
-│ 🔍 Find…                    2 of 7  │
-└─────────────────────────────────────┘
-
-Keep it compact and visually consistent with the existing app.
-
-Do NOT create a separate window.
-
-Do NOT create another editor.
+- Can always type immediately after opening.
+- Cursor appears correctly.
+- Enter creates a new line.
+- Backspace works normally.
+- Delete works normally.
+- Arrow keys work.
+- Home/End work.
+- Page Up/Page Down work.
+- Text selection works.
+- Mouse selection works.
+- Double-click word selection works.
+- Triple-click/line selection behaves normally.
 
 ==================================================
-SEARCH BEHAVIOR
+2. SCROLLING
 ==================================================
 
-Search the current note's text.
+Create a very long document.
 
-Search should happen LIVE as the user types.
+Verify:
 
-Example:
+- Vertical scrolling works smoothly.
+- Scroll wheel works.
+- Trackpad scrolling works.
+- Page Up/Page Down work.
+- No horizontal scrolling appears.
+- Long lines wrap correctly.
+- Wrapped lines do not cause line-number corruption.
 
-Document:
-
-Hello world
-This is my world
-Another line
-
-Search:
-
-world
-
-Both matches should be found.
-
-The current match should be visibly selected/highlighted using native NSTextView selection behavior.
-
-Do NOT modify the actual text to highlight matches.
+Do NOT modify the existing scrolling architecture unless an actual bug is found.
 
 ==================================================
-KEYBOARD SHORTCUTS
+3. LINE NUMBERS
 ==================================================
 
-⌘F
-→ Open Find.
+Verify with:
 
-⌘G
-→ Find next.
+1 line
+10 lines
+100 lines
+500 lines
 
-⇧⌘G
-→ Find previous.
+Also test:
 
-Enter
-→ Find next while Find UI is focused.
+- empty lines
+- consecutive empty lines
+- long wrapped lines
+- inserting lines in the middle
+- deleting lines in the middle
+- undo/redo
+- scrolling
 
-Shift + Enter
-→ Find previous.
+Line numbers must remain perfectly aligned with the corresponding text baseline.
 
-Escape
-→ Close Find UI and return focus to the editor.
-
-When Find closes, the editor should become first responder again.
-
-==================================================
-MATCH COUNTER
-==================================================
-
-Show:
-
-"2 of 7"
-
-meaning:
-
-current match = 2
-total matches = 7
-
-If there are no matches:
-
-"No matches"
-
-If the search field is empty:
-
-Do not show a match count.
-
-The counter should update immediately as the search text changes.
+Do NOT rewrite the line-number implementation.
 
 ==================================================
-SEARCH RULES
+4. FORMATTING
 ==================================================
-
-Default search behavior:
-
-- Case-insensitive
-- Search plain visible text
-- Search across the entire current note
-- Do not modify the stored text
-- Do not modify formatting
-
-Example:
-
-Searching:
-
-hello
-
-should find:
-
-Hello
-HELLO
-hello
-
-==================================================
-SELECTION / NAVIGATION
-==================================================
-
-When a match is found:
-
-1. Select that match in the existing NSTextView.
-2. Scroll the editor so the match is visible.
-3. Keep the existing cursor/selection behavior intact.
-
-Pressing ⌘G should move:
-
-match 1
-→ match 2
-→ match 3
-→ ...
-→ match N
-→ match 1
-
-Likewise, ⇧⌘G should move backwards.
-
-If the match is below the current viewport, the existing vertical scrolling system should automatically reveal it.
-
-DO NOT implement custom scrolling.
-
-Use the existing NSTextView selection and scrolling APIs.
-
-==================================================
-FORMATTING
-==================================================
-
-Find must work with formatted text.
-
-For example:
-
-Hello WORLD
-
-If "WORLD" is bold, searching "world" must still find it.
-
-Do NOT remove or modify bold/italic attributes.
-
-Do NOT change formatting when selecting a match.
-
-==================================================
-UNDO / REDO
-==================================================
-
-Searching must NOT create undo operations.
-
-Opening Find must NOT create an undo operation.
-
-Moving between search results must NOT create undo operations.
-
-Closing Find must NOT create an undo operation.
-
-The existing undo/redo stack must remain unchanged.
-
-==================================================
-PERSISTENCE
-==================================================
-
-Find must NOT affect persistence.
-
-Searching must NOT trigger a document save.
-
-Selecting a search result must NOT modify the stored document.
-
-==================================================
-IMPORTANT UI BEHAVIOR
-==================================================
-
-When ⌘F is pressed:
-
-- Find UI appears.
-- Search field automatically receives focus.
-- Existing editor text remains unchanged.
-
-When Escape is pressed:
-
-- Find UI disappears.
-- Editor regains first responder.
-- Existing selection/cursor state is restored as naturally as possible.
-
-Do NOT steal focus permanently from the editor.
-
-==================================================
-EDGE CASES
-==================================================
-
-Handle:
-
-- Empty document
-- Empty search
-- No matches
-- One match
-- Multiple matches
-- Search text longer than document
-- Search while scrolled to bottom
-- Search while text is formatted
-- Search after editing the document
-- Search after pressing Enter
-- Search after undo/redo
-- Closing and reopening Find
-
-If the document changes while Find is open, refresh the match results.
-
-==================================================
-DO NOT IMPLEMENT
-==================================================
-
-Do NOT add:
-
-- Replace
-- Replace All
-- Regular expressions
-- Case-sensitive toggle
-- Whole-word toggle
-- Search history
-- Fuzzy search
-- Multiple notes search
-- File search
-
-Keep Find deliberately simple.
-
-==================================================
-REGRESSION TEST
-==================================================
-
-Use this document:
-
-Hello world
-This is another world
-WORLD is here
-Nothing here
-Hello again
 
 Test:
 
-1. Press ⌘F.
-2. Search for:
+⌘B
+⌘I
+⌘Z
+⇧⌘Z
 
-world
+Verify:
 
-3. Verify:
+- Bold works.
+- Italic works.
+- Bold + italic works.
+- Formatting can be undone.
+- Formatting can be redone.
+- Typing after formatted text behaves correctly.
+- Formatting survives saving and reopening.
 
-1 of 3
-
-4. Press Enter.
-5. Verify:
-
-2 of 3
-
-6. Press Enter again.
-7. Verify:
-
-3 of 3
-
-8. Press Enter again.
-9. Verify it wraps back to:
-
-1 of 3
-
-10. Press Shift+Enter.
-11. Verify it moves backward.
-
-12. Press Escape.
-13. Verify Find closes.
-14. Verify editor receives keyboard input again.
-
-Then test:
-
-- ⌘G
-- ⇧⌘G
-- formatted text
-- long documents requiring vertical scrolling
-- no-match searches
-
-Finally:
-
-15. Quit.
-16. Reopen.
-17. Verify document content and formatting are unchanged.
+Do not change the formatting architecture.
 
 ==================================================
-CRITICAL REGRESSION PROTECTION
+5. FIND
 ==================================================
 
-Do NOT modify:
+Test:
 
-- NSTextView architecture
-- NSScrollView architecture
-- line-number implementation
-- persistence implementation
-- formatting implementation
-- undo manager
-- menu-bar lifecycle
+⌘F
+⌘G
+⇧⌘G
+Escape
 
-Use the existing editor.
+Verify:
 
-Do not report completion merely because the build succeeds.
+- Find opens correctly.
+- Search field receives focus.
+- Matching text is selected.
+- Search works across multiple lines.
+- Search works with formatted text.
+- No matches are handled correctly.
+- Search wraps around correctly.
+- Escape returns focus to the editor.
+- Find does not modify undo history.
 
-Actually launch the application and perform the complete test above.
+==================================================
+6. TXT IMPORT / EXPORT
+==================================================
+
+Test:
+
+- Empty TXT file
+- One-line TXT file
+- Multi-line TXT file
+- Very long TXT file
+- UTF-8 text
+- Unicode characters
+- Emoji
+- Windows CRLF line endings
+- LF line endings
+
+Verify imported content displays correctly.
+
+Export the same content and verify the resulting TXT contains the expected plain text.
+
+Do not modify the existing import/export architecture unless a real bug is found.
+
+==================================================
+7. PERSISTENCE
+==================================================
+
+Test:
+
+1. Type content.
+2. Apply formatting.
+3. Quit using ⌘Q.
+4. Relaunch.
+5. Verify content is restored.
+6. Verify formatting is restored.
+
+Also test:
+
+- Empty note
+- Long note
+- Rapid typing
+- Multiple quit/relaunch cycles
+
+Do NOT change the storage location.
+
+Do NOT introduce a second storage system.
+
+==================================================
+8. MENU-BAR LIFECYCLE
+==================================================
+
+Verify:
+
+- App launches correctly.
+- Menu-bar icon appears.
+- Clicking it opens the popover.
+- Clicking outside behaves correctly.
+- Reopening works.
+- ⌘Q completely terminates the app.
+- No orphan NotchPad process remains.
+- Relaunch works normally.
+
+==================================================
+9. TXT DRAG & DROP
+==================================================
+
+Verify:
+
+- Dragging a TXT file onto the editor works.
+- Imported content appears correctly.
+- Existing content is not silently destroyed if confirmation is required.
+- Persistence works afterward.
+
+==================================================
+10. LIGHT / DARK MODE
+==================================================
+
+Test the application in:
+
+- Light Mode
+- Dark Mode
+
+Verify:
+
+- Text remains readable.
+- Line numbers remain readable.
+- Toolbar remains readable.
+- Find remains readable.
+- Status text remains readable.
+- Editor background adapts correctly.
+- No hard-coded colors look broken.
+
+Do NOT redesign either theme.
+
+==================================================
+11. IMPORTANT VISUAL BUG CHECK
+==================================================
+
+Inspect the first-line editor area carefully.
+
+There appears to be a strange rounded control/icon immediately before the text cursor in the current UI screenshot.
+
+Determine whether this is:
+
+- an intentional editor control,
+- an accidental view,
+- an NSTextView accessory,
+- an input/formatting artifact,
+- or another unintended UI element.
+
+If it is NOT intentionally part of the design:
+
+REMOVE/FIX ONLY THAT ARTIFACT.
+
+Do not alter the surrounding editor layout.
+
+==================================================
+12. CRASH / FREEZE CHECK
+==================================================
+
+The application has previously experienced:
+
+- freezes when pressing Enter
+- crashes related to line numbers
+- typing becoming disabled
+- scrolling/layout problems
+
+These issues are now believed to be fixed.
+
+Explicitly test:
+
+- typing continuously
+- pressing Enter repeatedly
+- holding Enter
+- typing 100+ lines
+- scrolling while typing
+- formatting while typing
+- Find while typing
+- undo/redo repeatedly
+
+The application must remain responsive.
+
+==================================================
+13. PERFORMANCE
+==================================================
+
+Do not optimize prematurely.
+
+Only investigate if an actual performance issue appears.
+
+The editor should remain responsive with at least several hundred lines of text.
+
+==================================================
+14. CRITICAL RULE
+
+DO NOT refactor stable systems simply because they could be "cleaner."
+
+If something works:
+
+LEAVE IT ALONE.
+
+Make the smallest possible changes only when a real bug is reproduced.
+
+==================================================
+FINAL VERIFICATION
+
+Build the actual application.
+
+Launch the actual built executable.
+
+Perform the tests above.
+
+Do not report success based only on compilation.
 
 Report:
 
-- Find UI implementation
-- match-search implementation
-- keyboard shortcuts
+- bugs found
+- bugs fixed
 - files changed
+- tests performed
 - build result
-- test results
-- confirmation that existing formatting, undo/redo, scrolling, line numbers, and persistence still work.
+- launch result
+- whether any existing functionality was changed
 
-STOP AFTER FIND WORKS.
+If no bugs are found, make ZERO unnecessary code changes.
+
+STOP AFTER THIS PHASE.
