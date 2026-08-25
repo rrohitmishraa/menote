@@ -14,7 +14,7 @@ final class AboutWindowController: NSWindowController {
     required init?(coder: NSCoder) { fatalError() }
 
     private func buildWindow() {
-        let w = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 440),
+        let w = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
                          styleMask: [.titled, .closable],
                          backing: .buffered, defer: false)
         w.title = "Menote"
@@ -381,9 +381,10 @@ final class AboutWindowController: NSWindowController {
         t.font = .systemFont(ofSize: 12, weight: .medium)
         t.textColor = .labelColor
 
-        let d = NSTextField(labelWithString: desc)
+        let d = NSTextField(wrappingLabelWithString: desc)
         d.font = .systemFont(ofSize: 12)
         d.textColor = .secondaryLabelColor
+        d.preferredMaxLayoutWidth = 300
 
         row.addArrangedSubview(t)
         row.addArrangedSubview(d)
