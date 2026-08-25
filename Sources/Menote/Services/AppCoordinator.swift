@@ -1,5 +1,6 @@
 import AppKit
 import MenoteCore
+import Carbon.HIToolbox
 
 final class AppCoordinator: MenuBarManagerDelegate {
     let settings = AppSettings.shared
@@ -49,6 +50,12 @@ final class AppCoordinator: MenuBarManagerDelegate {
     }
 
     func start() {
+        hotkeyManager.onKeyDown = { [weak self] in
+            self?.menuBarManager.togglePopover()
+        }
+
+        hotkeyManager.register(keyCode: 18, modifierMask: UInt32(cmdKey | shiftKey))
+
         let vc = makeScratchpadVC()
         scratchpadVC = vc
 

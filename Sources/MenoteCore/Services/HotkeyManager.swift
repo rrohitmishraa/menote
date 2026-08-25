@@ -10,9 +10,13 @@ public final class HotkeyManager {
 
     public init() {}
 
-    /// Registers ⌘⇧Space as a system-wide shortcut. Carbon hotkeys do not
-    /// require accessibility permissions.
-    public func register() {
+    /// Registers a global shortcut using Carbon event handler.
+    /// The handler is called on the main thread when the shortcut is pressed.
+    /// Call this method once during application launch.
+    /// - Parameters:
+    ///   - keyCode: The Carbon key code for the shortcut (e.g., kVK_ANSI_1 = 18)
+    ///   - modifierMask: The modifier key mask (e.g., cmdKey | shiftKey)
+    public func register(keyCode: UInt32, modifierMask: UInt32) {
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed))
@@ -38,13 +42,22 @@ public final class HotkeyManager {
         guard status == noErr else { return }
 
         var hotKeyID = EventHotKeyID(signature: hotKeyIDSignature, id: 1)
-        RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(cmdKey | shiftKey),
+        let status2 = RegisterEventHotKey(
+            keyCode,
+            modifierMask,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
             &hotKeyRef)
+        if status2 == noErr {
+            // successfully registered
+        }
         _ = hotKeyID
+    }
+
+    deinit {
+        if hotKeyRef != nil {
+            UnregisterEventHotKey(hotKeyRef!)
+        }
     }
 }

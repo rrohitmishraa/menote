@@ -63,7 +63,7 @@ final class MenuBarManager {
         }
     }
 
-    private func togglePopover() {
+    internal func togglePopover() {
         guard let popover = popover, let button = statusItem?.button else { return }
 
         if popover.isShown {
