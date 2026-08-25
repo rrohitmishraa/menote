@@ -383,6 +383,7 @@ final class ScratchpadViewController: NSViewController {
     private var wordCountLabel: NSTextField!
 
     private var statusTimer: Timer?
+    private var linkDetectionWork: DispatchWorkItem?
 
     // Slash commands
     private let slashPopup = SlashCommandPopup()
@@ -673,11 +674,21 @@ final class ScratchpadViewController: NSViewController {
         wordCountLabel.font = .systemFont(ofSize: 11)
         wordCountLabel.textColor = .tertiaryLabelColor
 
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        spacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let aboutButton = NSButton(title: "About", target: self, action: #selector(showAbout))
+        aboutButton.font = .systemFont(ofSize: 11, weight: .medium)
+        aboutButton.bezelStyle = .inline
+        aboutButton.isBordered = false
+        aboutButton.contentTintColor = .controlAccentColor
 
-        let footerStack = NSStackView(views: [statusLabel, spacer, wordCountLabel])
+        let leftSpacer = NSView()
+        leftSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        leftSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let rightSpacer = NSView()
+        rightSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        rightSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let footerStack = NSStackView(views: [statusLabel, leftSpacer, aboutButton, rightSpacer, wordCountLabel])
         footerStack.orientation = .horizontal
         footerStack.spacing = 8
         footerStack.alignment = .centerY
@@ -730,6 +741,7 @@ final class ScratchpadViewController: NSViewController {
         resizeEditorToContent()
         lineNumberView?.needsDisplay = true
         updateWordCount()
+        textView.checkTextInDocument(nil)
     }
 
     private func normalizeAttributedString(_ attr: NSAttributedString) -> NSAttributedString {
@@ -1154,6 +1166,7 @@ final class ScratchpadViewController: NSViewController {
             lineNumberView?.needsDisplay = true
             refreshMatches()
             updateWordCount()
+            textView.checkTextInDocument(nil)
         } catch {
             showImportError("Could not read file: \(error.localizedDescription)")
         }
@@ -1181,6 +1194,7 @@ extension ScratchpadViewController: NSTextViewDelegate {
     func textDidChange(_ notification: Notification) {
         resizeEditorToContent()
         updateWordCount()
+        scheduleLinkDetection()
         guard !isLoadingContent else { return }
         let rtf = currentRichTextData()
         store.updateCurrentText(textView.string, richText: rtf)
@@ -1205,6 +1219,33 @@ extension ScratchpadViewController: NSTextViewDelegate {
 
     @objc private func toggleItalic() {
         textView.toggleTrait(.italicFontMask)
+    }
+
+    @objc private func showAbout() {
+        AboutWindowController.shared.showAbout()
+    }
+
+    // MARK: - Link detection
+
+    private func scheduleLinkDetection() {
+        linkDetectionWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.textView.checkTextInDocument(nil)
+        }
+        linkDetectionWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        if let url = link as? URL {
+            NSWorkspace.shared.open(url)
+            return true
+        }
+        if let str = link as? String, let url = URL(string: str) {
+            NSWorkspace.shared.open(url)
+            return true
+        }
+        return false
     }
 }
 

@@ -79,12 +79,18 @@ final class MenuBarManager {
 
     private func showContextMenu() {
         let menu = NSMenu()
+        menu.addItem(withTitle: "About MeNote", action: #selector(aboutAction(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit MeNote", action: #selector(quitAction(_:)), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
 
         if let event = NSApp.currentEvent, let button = statusItem?.button {
             NSMenu.popUpContextMenu(menu, with: event, for: button)
         }
+    }
+
+    @objc private func aboutAction(_ sender: NSMenuItem) {
+        AboutWindowController.shared.showAbout()
     }
 
     @objc private func newNoteAction(_ sender: NSMenuItem) { delegate?.menuBarDidRequestNewNote() }

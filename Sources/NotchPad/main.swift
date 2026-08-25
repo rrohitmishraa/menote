@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
 
-        appMenu.addItem(withTitle: "About MeNote", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About MeNote", action: #selector(showAbout), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences…", action: #selector(showPreferences), keyEquivalent: ",")
         appMenu.addItem(NSMenuItem.separator())
@@ -70,6 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPreferences() {
         coordinator?.openPreferences()
+    }
+
+    @objc private func showAbout() {
+        AboutWindowController.shared.showAbout()
     }
 }
 

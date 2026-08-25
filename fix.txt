@@ -1,266 +1,299 @@
-PHASE 11 — ABOUT / HELP + LAUNCH AT LOGIN
+PHASE 12 — CLICKABLE URLS
 
 MeNote is stable and feature-complete.
 
-Implement ONLY:
+Implement ONLY clickable URL behavior.
 
-1. About / Help page
-2. Keyboard shortcut reference
-3. Slash-command reference
-4. Launch at Login setting
+Do NOT modify:
 
-Do NOT modify existing editor functionality.
-
-==================================================
-1. ABOUT / HELP
-
-Add an "About MeNote…" item to the application menu.
-
-Opening it should show a small native macOS window.
-
-Keep it simple and polished.
-
-Display:
-
-MeNote
-
-Version 1.0.0
-
-A minimal menu-bar writing app.
-
-Then provide a clear "How to use MeNote" section.
+- NSTextView architecture
+- persistence architecture
+- scrolling
+- wrapping
+- line numbers
+- Find
+- Bold/Italic
+- text colors
+- slash commands
+- word counter
+- TXT import/export
+- About/Help
+- Launch at Login
+- menu-bar lifecycle
+- toolbar layout
 
 ==================================================
-2. KEYBOARD SHORTCUTS
+1. URL DETECTION
+==================================================
 
-Show the currently supported shortcuts.
+Automatically detect URLs in the editor.
 
-At minimum:
+Support:
 
-⌘A    Select All
-⌘C    Copy
-⌘V    Paste
-⌘X    Cut
-⌘Z    Undo
-⇧⌘Z   Redo
-⌘B    Bold
-⌘I    Italic
-⌘F    Find
-⌘G    Next Match
-⇧⌘G   Previous Match
-⌘Q    Quit MeNote
+https://example.com
+http://example.com
 
-Only display shortcuts that actually work.
+Also support common URLs with:
 
-Do NOT invent shortcuts.
+- paths
+- query parameters
+- fragments
+- ports
+- subdomains
+
+Example:
+
+https://example.com/test?q=hello
+
+Do not require the user to manually format the URL.
 
 ==================================================
-3. SLASH COMMANDS
+2. LINK APPEARANCE
+==================================================
 
-Add a section:
+Detected URLs should use a subtle native link appearance.
 
-Slash Commands
+Use the system's appropriate link color.
 
-/line      Insert separator
-/list      Start bullet list
-/number    Start numbered list
+Do not introduce a custom bright color.
 
-Also explain:
+Do not make the URL excessively bold.
 
-Type "/" at the beginning of a line or after whitespace to see command suggestions.
+The link should remain readable in:
 
-Enter executes the selected command.
-Escape closes the suggestions.
-
-Keep this concise.
+- Light Mode
+- Dark Mode
 
 ==================================================
-4. TEXT FORMATTING
+3. CLICKING
+==================================================
 
-Briefly explain:
+Clicking a detected URL should open it using the user's default browser.
 
-Bold
-Italic
-Text Colors
+Use the native macOS URL-opening mechanism.
 
-For text colors, explain that the color circles in the toolbar apply a color to selected text or change the color of newly typed text.
+Do NOT embed a browser inside MeNote.
 
-Do not create another color UI.
+Do NOT create a web view.
 
 ==================================================
-5. FILES
+4. EDITING
+==================================================
 
-Briefly document:
+URLs must remain normal editable text.
 
-Open TXT
-Export TXT
+The user must be able to:
 
-Explain that TXT files contain plain text and therefore do not preserve formatting such as Bold, Italic, or text colors.
+- place the cursor inside a URL
+- edit it
+- delete it
+- select it
+- copy it
+- paste it
 
-Do not add new file functionality.
+If the URL becomes invalid after editing, it should no longer behave as a clickable link.
+
+If a valid URL is created through editing, it should become clickable.
 
 ==================================================
-6. LAUNCH AT LOGIN
+5. SELECTION
 
-Add:
+Clicking/selecting a URL must not break normal text selection.
 
-☐ Launch MeNote at login
+The user should still be able to select the URL and copy it.
 
-Use the native macOS mechanism appropriate for the current macOS version.
+⌘C should copy the actual URL text.
 
-Do NOT use:
-
-- shell scripts
-- LaunchAgents created manually
-- cron
-- login-item hacks
-- modifying user startup files
-
-Use the proper macOS login-item API.
+Do not copy hidden metadata.
 
 ==================================================
-7. SETTING BEHAVIOR
+6. COMMAND CLICK
 
-When enabled:
+If appropriate for native macOS text behavior, support:
 
-MeNote should launch automatically when the user logs into macOS.
+⌘ + click
 
-Because MeNote is a menu-bar application, it should launch into the menu bar without unnecessarily opening a large window.
+to open the URL.
 
-When disabled:
+Do not interfere with normal clicking behavior.
 
-MeNote should no longer launch automatically.
-
-The checkbox state must reflect the actual system registration state.
-
-Do not merely store a Boolean and pretend the login item exists.
+If ordinary clicking already works correctly with NSTextView conventions, preserve the simplest reliable implementation.
 
 ==================================================
-8. PERMISSION / API COMPATIBILITY
+7. PERSISTENCE
 
-Use the correct API for the macOS deployment target.
-
-If the current deployment target supports ServiceManagement / SMAppService, prefer that.
-
-Do not use deprecated login-item mechanisms unnecessarily.
-
-If the API requires the application to be packaged in a way that differs from the current development build, explain the limitation rather than implementing a fake solution.
-
-==================================================
-9. ABOUT WINDOW DESIGN
-
-The About window should feel native.
-
-Suggested structure:
-
-             MeNote
-            Version 1.0.0
-
-      A minimal menu-bar
-         writing app.
-
-────────────────────────────
-
-Keyboard Shortcuts
-
-⌘B        Bold
-⌘I        Italic
-⌘F        Find
-⌘G        Next Match
-⇧⌘G       Previous Match
-⌘Z        Undo
-⇧⌘Z       Redo
-
-Slash Commands
-
-/line      Separator
-/list      Bullet list
-/number    Numbered list
-
-────────────────────────────
-
-☐ Launch MeNote at login
-
-Do not literally copy this ASCII layout.
-
-Use proper native AppKit layout.
-
-==================================================
-10. WINDOW BEHAVIOR
-
-The About/Help window should:
-
-- open independently from the editor popover
-- remain available while the menu-bar popover closes
-- be closable normally
-- not terminate MeNote when closed
-- not create duplicate About windows unnecessarily
-
-If the user opens About twice, bring the existing window to front instead of creating multiple copies.
-
-==================================================
-11. VISUAL STYLE
-
-Match the existing MeNote UI.
-
-Use:
-
-- native macOS fonts
-- semantic colors
-- appropriate spacing
-- subtle hierarchy
-- light/dark mode support
-
-Do NOT introduce a separate visual design language.
-
-Do NOT make it look like a website.
-
-==================================================
-12. IMPORTANT
-
-Do NOT add:
-
-- Settings window
-- General preferences
-- Themes
-- Font selector
-- Custom keyboard shortcut editor
-- Cloud settings
-- Account system
-- telemetry
-- analytics
-- extra editor features
-
-This is an About/Help surface, not a full preferences application.
-
-==================================================
-13. TESTING
+Links must survive saving and reopening.
 
 Test:
 
-1. Open About MeNote.
-2. Verify version is correct.
-3. Verify shortcuts are accurate.
-4. Verify slash commands are accurate.
-5. Verify TXT information is accurate.
-6. Toggle Launch at Login on.
-7. Verify the system reports MeNote as a login item.
-8. Toggle it off.
-9. Verify it is removed.
-10. Relaunch MeNote.
-11. Open About again.
-12. Verify the checkbox reflects the actual state.
-13. Test Light Mode.
-14. Test Dark Mode.
-15. Close About.
-16. Verify the editor still works normally.
+1. Type URL.
+2. Quit MeNote.
+3. Relaunch.
+4. Verify URL remains clickable.
+
+Do not create a separate link database.
+
+Store the link as part of the existing attributed text/persistence mechanism.
 
 ==================================================
-14. REGRESSION PROTECTION
+8. FORMATTING COMPATIBILITY
 
-Do NOT break:
+Links must work with:
+
+- Bold
+- Italic
+- text colors
+
+Applying Bold, Italic, or a text color must not accidentally destroy the URL's clickability.
+
+Similarly, detecting a URL must not remove existing formatting unnecessarily.
+
+==================================================
+9. FIND
+
+Find must continue working with URLs.
+
+For example:
+
+⌘F
+
+Search:
+
+example.com
+
+should find the URL normally.
+
+Do not modify the existing Find architecture.
+
+==================================================
+10. WRAPPING / SCROLLING
+
+Long URLs should behave sensibly inside the editor.
+
+Do not introduce horizontal scrolling.
+
+Preserve the existing text-wrapping behavior.
+
+Vertical scrolling must continue working normally.
+
+==================================================
+11. TXT EXPORT
+
+Exporting a note to TXT must produce the actual URL text.
+
+Example:
+
+https://example.com
+
+Do NOT export:
+
+HTML
+Markdown
+hidden link metadata
+custom markup
+
+The TXT file should contain:
+
+https://example.com
+
+==================================================
+12. TXT IMPORT
+
+When importing a TXT file containing URLs:
+
+https://example.com
+
+the URL should be detected and become clickable.
+
+Do not require the user to manually format imported URLs.
+
+==================================================
+13. SLASH COMMAND COMPATIBILITY
+
+Do not interfere with:
+
+/line
+/list
+/number
+
+URLs such as:
+
+https://example.com/path
+
+must NOT accidentally trigger slash commands.
+
+==================================================
+14. URL BOUNDARIES
+
+Do not accidentally include common trailing punctuation in the URL.
+
+Example:
+
+Visit https://example.com.
+
+The clickable URL should be:
+
+https://example.com
+
+The final period should remain normal text.
+
+Handle common punctuation correctly.
+
+==================================================
+15. PERFORMANCE
+
+Do not continuously perform expensive full-document processing on every keystroke if avoidable.
+
+Keep URL detection lightweight.
+
+Do not introduce noticeable typing latency.
+
+==================================================
+16. IMPORTANT IMPLEMENTATION RULE
+
+Use NSTextView's existing attributed-string/link capabilities where appropriate.
+
+Do NOT create custom link views.
+
+Do NOT create a separate browser component.
+
+Do NOT create a custom URL database.
+
+Keep links as attributed text.
+
+==================================================
+17. TESTING
+
+Test:
+
+1. Type https://example.com
+2. Click it.
+3. Verify default browser opens.
+4. Edit the URL.
+5. Delete the URL.
+6. Paste a URL.
+7. Import a TXT containing a URL.
+8. Quit and reopen.
+9. Click the restored URL.
+10. Apply Bold.
+11. Apply Italic.
+12. Apply a text color.
+13. Find the URL.
+14. Copy the URL.
+15. Export to TXT.
+16. Verify exported text contains the exact URL.
+17. Test Light Mode.
+18. Test Dark Mode.
+19. Test long URLs.
+20. Test URL followed by punctuation.
+
+==================================================
+18. REGRESSION PROTECTION
+
+Everything below must continue working:
 
 - typing
+- Enter
 - scrolling
 - wrapping
 - line numbers
@@ -271,36 +304,44 @@ Do NOT break:
 - redo
 - Find
 - slash commands
+- /line
+- /list
+- /number
+- word counter
 - TXT import
 - TXT export
 - persistence
-- menu-bar behavior
+- About
+- Launch at Login
+- keyboard shortcuts
 - ⌘Q
-- word counter
+
+Do not modify unrelated systems.
 
 ==================================================
 FINAL
 
 Build the actual application.
 
-Launch the actual Release/debug build being used for development.
+Launch the actual application.
 
-Manually test About and Launch at Login.
+Manually test clickable URLs.
 
 Do not report success based solely on compilation.
 
 Report:
 
 - files changed
-- About implementation
-- shortcut documentation
-- slash-command documentation
-- Launch at Login implementation
-- macOS API used
-- login-item verification result
+- URL detection implementation
+- click behavior
+- editing behavior
+- persistence result
+- formatting compatibility
+- TXT import/export result
+- Find result
 - Light/Dark mode result
+- regression result
 - build result
 - launch result
-- regression result
 
-STOP AFTER PHASE 11.
+STOP AFTER PHASE 12.
