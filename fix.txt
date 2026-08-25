@@ -1,347 +1,188 @@
-PHASE 12 — CLICKABLE URLS
+IMPORTANT UI CORRECTION — READ THIS CAREFULLY
 
-MeNote is stable and feature-complete.
+The current UI is WRONG.
 
-Implement ONLY clickable URL behavior.
+I do NOT want:
+- translucent backgrounds
+- blue/colored/vibrancy backgrounds
+- gradients
+- glass effects
+- blurred backgrounds
+- rounded cards inside the window
+- visible borders around sections
+- colored side panels
+- a separate colored footer
+- a separate colored toolbar background
 
-Do NOT modify:
+I want the ENTIRE Menote popover to be ONE SOLID WHITE BLOCK.
 
-- NSTextView architecture
-- persistence architecture
-- scrolling
-- wrapping
+Use the attached screenshot as the reference for the CURRENT problem.
+
+DESIRED STRUCTURE:
+
+┌──────────────────────────────────────────────┐
+│  Toolbar                                     │
+│  file  share  B  /  ● ● ● ● ●        search │
+├──────────────────────────────────────────────┤
+│                                              │
+│  1   Editor content                          │
+│  2                                           │
+│  3                                           │
+│                                              │
+│                                              │
+│                                              │
+├──────────────────────────────────────────────┤
+│  Ready                              0 words  │
+└──────────────────────────────────────────────┘
+
+The entire rectangle above must be SOLID WHITE.
+
+The ONLY visual separation between the three areas should be thin horizontal separator lines:
+
+1. Toolbar
+──────────────────────────────────────────────
+
+2. Editor
+──────────────────────────────────────────────
+
+3. Status/footer
+
+There should NOT be vertical separators.
+
+There should NOT be a colored background behind the line numbers.
+
+There should NOT be a different background behind the footer.
+
+There should NOT be a different background behind the toolbar.
+
+Everything is one white surface.
+
+IMPORTANT DETAIL:
+
+The line-number gutter should also be white.
+
+So:
+
+Toolbar       → white
+Line numbers  → white
+Editor        → white
+Status bar    → white
+
+No transparency anywhere.
+
+NO NSVisualEffectView / vibrancy / material / blur should be visible anywhere in the Menote popover.
+
+If NSVisualEffectView is currently being used as the main background, remove it or disable its visual effect and replace the background with an opaque white NSView.
+
+The popover itself should also have an opaque white appearance.
+
+Do NOT rely on the desktop/window behind Menote for any visual effect.
+
+The final result should remain completely white regardless of what is behind the popover.
+
+BORDERS:
+
+Do not use a surrounding border around the UI.
+
+Do not put a border around the editor.
+
+Do not put a border around the line-number gutter.
+
+Do not put borders around toolbar controls.
+
+The only separators should be the two thin horizontal lines between:
+- toolbar / editor
+- editor / status bar
+
+These separators should be subtle and neutral gray.
+
+LAYOUT:
+
+Keep the existing functionality and dimensions.
+
+Do NOT redesign the toolbar.
+
+Keep:
+- file/open
+- share/export
+- bold
+- italic
+- text colors
+- find
 - line numbers
-- Find
-- Bold/Italic
-- text colors
-- slash commands
-- word counter
-- TXT import/export
-- About/Help
-- Launch at Login
-- menu-bar lifecycle
-- toolbar layout
-
-==================================================
-1. URL DETECTION
-==================================================
-
-Automatically detect URLs in the editor.
-
-Support:
-
-https://example.com
-http://example.com
-
-Also support common URLs with:
-
-- paths
-- query parameters
-- fragments
-- ports
-- subdomains
-
-Example:
-
-https://example.com/test?q=hello
-
-Do not require the user to manually format the URL.
-
-==================================================
-2. LINK APPEARANCE
-==================================================
-
-Detected URLs should use a subtle native link appearance.
-
-Use the system's appropriate link color.
-
-Do not introduce a custom bright color.
-
-Do not make the URL excessively bold.
-
-The link should remain readable in:
-
-- Light Mode
-- Dark Mode
-
-==================================================
-3. CLICKING
-==================================================
-
-Clicking a detected URL should open it using the user's default browser.
-
-Use the native macOS URL-opening mechanism.
-
-Do NOT embed a browser inside MeNote.
-
-Do NOT create a web view.
-
-==================================================
-4. EDITING
-==================================================
-
-URLs must remain normal editable text.
-
-The user must be able to:
-
-- place the cursor inside a URL
-- edit it
-- delete it
-- select it
-- copy it
-- paste it
-
-If the URL becomes invalid after editing, it should no longer behave as a clickable link.
-
-If a valid URL is created through editing, it should become clickable.
-
-==================================================
-5. SELECTION
-
-Clicking/selecting a URL must not break normal text selection.
-
-The user should still be able to select the URL and copy it.
-
-⌘C should copy the actual URL text.
-
-Do not copy hidden metadata.
-
-==================================================
-6. COMMAND CLICK
-
-If appropriate for native macOS text behavior, support:
-
-⌘ + click
-
-to open the URL.
-
-Do not interfere with normal clicking behavior.
-
-If ordinary clicking already works correctly with NSTextView conventions, preserve the simplest reliable implementation.
-
-==================================================
-7. PERSISTENCE
-
-Links must survive saving and reopening.
-
-Test:
-
-1. Type URL.
-2. Quit MeNote.
-3. Relaunch.
-4. Verify URL remains clickable.
-
-Do not create a separate link database.
-
-Store the link as part of the existing attributed text/persistence mechanism.
-
-==================================================
-8. FORMATTING COMPATIBILITY
-
-Links must work with:
-
-- Bold
-- Italic
-- text colors
-
-Applying Bold, Italic, or a text color must not accidentally destroy the URL's clickability.
-
-Similarly, detecting a URL must not remove existing formatting unnecessarily.
-
-==================================================
-9. FIND
-
-Find must continue working with URLs.
-
-For example:
-
-⌘F
-
-Search:
-
-example.com
-
-should find the URL normally.
-
-Do not modify the existing Find architecture.
-
-==================================================
-10. WRAPPING / SCROLLING
-
-Long URLs should behave sensibly inside the editor.
-
-Do not introduce horizontal scrolling.
-
-Preserve the existing text-wrapping behavior.
-
-Vertical scrolling must continue working normally.
-
-==================================================
-11. TXT EXPORT
-
-Exporting a note to TXT must produce the actual URL text.
-
-Example:
-
-https://example.com
-
-Do NOT export:
-
-HTML
-Markdown
-hidden link metadata
-custom markup
-
-The TXT file should contain:
-
-https://example.com
-
-==================================================
-12. TXT IMPORT
-
-When importing a TXT file containing URLs:
-
-https://example.com
-
-the URL should be detected and become clickable.
-
-Do not require the user to manually format imported URLs.
-
-==================================================
-13. SLASH COMMAND COMPATIBILITY
-
-Do not interfere with:
-
-/line
-/list
-/number
-
-URLs such as:
-
-https://example.com/path
-
-must NOT accidentally trigger slash commands.
-
-==================================================
-14. URL BOUNDARIES
-
-Do not accidentally include common trailing punctuation in the URL.
-
-Example:
-
-Visit https://example.com.
-
-The clickable URL should be:
-
-https://example.com
-
-The final period should remain normal text.
-
-Handle common punctuation correctly.
-
-==================================================
-15. PERFORMANCE
-
-Do not continuously perform expensive full-document processing on every keystroke if avoidable.
-
-Keep URL detection lightweight.
-
-Do not introduce noticeable typing latency.
-
-==================================================
-16. IMPORTANT IMPLEMENTATION RULE
-
-Use NSTextView's existing attributed-string/link capabilities where appropriate.
-
-Do NOT create custom link views.
-
-Do NOT create a separate browser component.
-
-Do NOT create a custom URL database.
-
-Keep links as attributed text.
-
-==================================================
-17. TESTING
-
-Test:
-
-1. Type https://example.com
-2. Click it.
-3. Verify default browser opens.
-4. Edit the URL.
-5. Delete the URL.
-6. Paste a URL.
-7. Import a TXT containing a URL.
-8. Quit and reopen.
-9. Click the restored URL.
-10. Apply Bold.
-11. Apply Italic.
-12. Apply a text color.
-13. Find the URL.
-14. Copy the URL.
-15. Export to TXT.
-16. Verify exported text contains the exact URL.
-17. Test Light Mode.
-18. Test Dark Mode.
-19. Test long URLs.
-20. Test URL followed by punctuation.
-
-==================================================
-18. REGRESSION PROTECTION
-
-Everything below must continue working:
-
-- typing
-- Enter
-- scrolling
-- wrapping
-- line numbers
-- Bold
-- Italic
-- text colors
-- undo
-- redo
-- Find
-- slash commands
-- /line
-- /list
-- /number
-- word counter
-- TXT import
-- TXT export
-- persistence
+- editor
+- status
 - About
-- Launch at Login
-- keyboard shortcuts
-- ⌘Q
+- word count
 
-Do not modify unrelated systems.
+Only change the visual background/structure.
 
-==================================================
-FINAL
+LINE NUMBERS:
 
-Build the actual application.
+Line numbers must sit directly on the same white surface as the editor.
 
-Launch the actual application.
+They should remain muted gray.
 
-Manually test clickable URLs.
+They must NOT be inside a colored gutter.
 
-Do not report success based solely on compilation.
+They must NOT have a vertical separator.
 
-Report:
+They should visually appear as part of the editor:
 
-- files changed
-- URL detection implementation
-- click behavior
-- editing behavior
-- persistence result
-- formatting compatibility
-- TXT import/export result
-- Find result
-- Light/Dark mode result
-- regression result
-- build result
-- launch result
+    1   Hello world
+    2   This is another line
+    3   Another line
 
-STOP AFTER PHASE 12.
+not:
+
+    [gray gutter] | editor
+
+The gutter is simply white space.
+
+POPOVER CORNERS:
+
+Keep the existing rounded outer popover shape if it is required by the macOS popover/window.
+
+But the INSIDE must still be one continuous white surface.
+
+Do not create an additional rounded white card inside the popover.
+
+The white surface should fill the entire popover content area.
+
+COLORS:
+
+Background:
+#FFFFFF
+
+Separator:
+a very subtle neutral gray, e.g. #E5E5E5
+
+Text:
+existing text color
+
+Line numbers:
+existing muted gray
+
+Do not introduce blue, purple, cyan, gradient, translucency, or vibrancy into the background.
+
+IMPORTANT:
+
+This is NOT asking you to make only the editor white.
+
+I want the WHOLE Menote interface to be white.
+
+The toolbar, editor, line-number area, and footer/status area must all be the SAME opaque white background.
+
+Use simple horizontal rules to establish hierarchy.
+
+Before finishing, run the app and visually verify that placing Menote over:
+- a blue desktop
+- a dark desktop
+- another application
+- an image
+
+produces exactly the same solid-white Menote surface.
+
+The background behind Menote must have ZERO influence on the appearance of the Menote UI.
+
+Do not change functionality while making this change.

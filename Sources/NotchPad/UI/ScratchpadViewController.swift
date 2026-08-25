@@ -278,14 +278,11 @@ final class SlashCommandPopup: NSObject {
         panel.isMovableByWindowBackground = false
         panel.hasShadow = true
 
-        let container = NSVisualEffectView()
-        container.material = .popover
-        container.blendingMode = .behindWindow
-        container.state = .active
+        let container = NSView(frame: panel.contentView!.bounds)
         container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.white.cgColor
         container.layer?.cornerRadius = 8
         container.layer?.masksToBounds = true
-        container.frame = panel.contentView!.bounds
         container.autoresizingMask = [.width, .height]
 
         let stack = NSStackView()
@@ -416,16 +413,12 @@ final class ScratchpadViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
-        let root = NSVisualEffectView()
-        root.material = .popover
-        root.blendingMode = .behindWindow
-        root.state = .active
+        let root = NSView()
         root.wantsLayer = true
+        root.layer?.backgroundColor = NSColor.white.cgColor
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.cornerCurve = .continuous
-        root.layer?.borderWidth = 0.5
-        root.layer?.borderColor = NSColor.separatorColor.cgColor
         view = root
 
         buildHeader()

@@ -41,11 +41,9 @@ final class NotesListOverlayViewController: NSViewController, NSMenuDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
 override func loadView() {
-        let root = NSVisualEffectView()
-        root.material = .popover
-        root.blendingMode = .behindWindow
-        root.state = .active
+        let root = NSView()
         root.wantsLayer = true
+        root.layer?.backgroundColor = NSColor.white.cgColor
         view = root
 
         backButton = NSButton(title: "← Notes", target: self, action: #selector(goBack))

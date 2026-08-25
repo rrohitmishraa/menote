@@ -46,11 +46,9 @@ final class NotchPanelController {
         pillPanel.contentView = pillView
         pillPanel.setAccessibilityIdentifier("notch-pill")
 
-        let content = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: Self.bodyWidth, height: Self.bodyHeight))
-        content.material = .popover
-        content.blendingMode = .behindWindow
-        content.state = .active
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: Self.bodyWidth, height: Self.bodyHeight))
         content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.white.cgColor
         content.layer?.cornerRadius = 12
         content.layer?.masksToBounds = true
         content.layer?.cornerCurve = .continuous
