@@ -8,24 +8,24 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "NotchPadCore",
-            path: "Sources/NotchPadCore",
+            name: "MenoteCore",
+            path: "Sources/MenoteCore",
             swiftSettings: [
                 .unsafeFlags(["-swift-version", "5"])
             ]
         ),
         .executableTarget(
             name: "menote",
-            dependencies: ["NotchPadCore"],
-            path: "Sources/NotchPad",
+            dependencies: ["MenoteCore"],
+            path: "Sources/Menote",
             swiftSettings: [
                 .unsafeFlags(["-swift-version", "5"])
             ]
         ),
         .testTarget(
-            name: "NotchPadCoreTests",
-            dependencies: ["NotchPadCore"],
-            path: "Tests/NotchPadCoreTests"
+            name: "MenoteCoreTests",
+            dependencies: ["MenoteCore"],
+            path: "Tests/MenoteCoreTests"
         )
     ]
 )

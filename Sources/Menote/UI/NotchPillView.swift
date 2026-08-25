@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -62,7 +62,7 @@ final class NotchPillView: NSView {
     }
 
     override func accessibilityLabel() -> String? {
-        "Open MeNote"
+        "Open Menote"
     }
 
     override func isAccessibilityElement() -> Bool { true }

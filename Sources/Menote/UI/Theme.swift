@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 enum Theme {
     static var panelBackground: NSColor {

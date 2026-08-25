@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 enum StorageUnavailableAlert {
     static func present(
@@ -10,7 +10,7 @@ enum StorageUnavailableAlert {
         let alert = NSAlert()
         alert.messageText = "Storage Unavailable"
         alert.informativeText = """
-            MeNote cannot access its storage location:
+            Menote cannot access its storage location:
             
             \(reason)
             

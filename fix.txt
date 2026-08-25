@@ -1,188 +1,126 @@
-IMPORTANT UI CORRECTION — READ THIS CAREFULLY
-
-The current UI is WRONG.
-
-I do NOT want:
-- translucent backgrounds
-- blue/colored/vibrancy backgrounds
-- gradients
-- glass effects
-- blurred backgrounds
-- rounded cards inside the window
-- visible borders around sections
-- colored side panels
-- a separate colored footer
-- a separate colored toolbar background
-
-I want the ENTIRE Menote popover to be ONE SOLID WHITE BLOCK.
-
-Use the attached screenshot as the reference for the CURRENT problem.
-
-DESIRED STRUCTURE:
-
-┌──────────────────────────────────────────────┐
-│  Toolbar                                     │
-│  file  share  B  /  ● ● ● ● ●        search │
-├──────────────────────────────────────────────┤
-│                                              │
-│  1   Editor content                          │
-│  2                                           │
-│  3                                           │
-│                                              │
-│                                              │
-│                                              │
-├──────────────────────────────────────────────┤
-│  Ready                              0 words  │
-└──────────────────────────────────────────────┘
-
-The entire rectangle above must be SOLID WHITE.
-
-The ONLY visual separation between the three areas should be thin horizontal separator lines:
-
-1. Toolbar
-──────────────────────────────────────────────
-
-2. Editor
-──────────────────────────────────────────────
-
-3. Status/footer
-
-There should NOT be vertical separators.
-
-There should NOT be a colored background behind the line numbers.
-
-There should NOT be a different background behind the footer.
-
-There should NOT be a different background behind the toolbar.
-
-Everything is one white surface.
-
-IMPORTANT DETAIL:
-
-The line-number gutter should also be white.
-
-So:
-
-Toolbar       → white
-Line numbers  → white
-Editor        → white
-Status bar    → white
-
-No transparency anywhere.
-
-NO NSVisualEffectView / vibrancy / material / blur should be visible anywhere in the Menote popover.
-
-If NSVisualEffectView is currently being used as the main background, remove it or disable its visual effect and replace the background with an opaque white NSView.
-
-The popover itself should also have an opaque white appearance.
-
-Do NOT rely on the desktop/window behind Menote for any visual effect.
-
-The final result should remain completely white regardless of what is behind the popover.
-
-BORDERS:
-
-Do not use a surrounding border around the UI.
-
-Do not put a border around the editor.
-
-Do not put a border around the line-number gutter.
-
-Do not put borders around toolbar controls.
-
-The only separators should be the two thin horizontal lines between:
-- toolbar / editor
-- editor / status bar
-
-These separators should be subtle and neutral gray.
-
-LAYOUT:
-
-Keep the existing functionality and dimensions.
-
-Do NOT redesign the toolbar.
-
-Keep:
-- file/open
-- share/export
-- bold
-- italic
-- text colors
-- find
-- line numbers
-- editor
-- status
-- About
-- word count
-
-Only change the visual background/structure.
-
-LINE NUMBERS:
-
-Line numbers must sit directly on the same white surface as the editor.
-
-They should remain muted gray.
-
-They must NOT be inside a colored gutter.
-
-They must NOT have a vertical separator.
-
-They should visually appear as part of the editor:
-
-    1   Hello world
-    2   This is another line
-    3   Another line
-
-not:
-
-    [gray gutter] | editor
-
-The gutter is simply white space.
-
-POPOVER CORNERS:
-
-Keep the existing rounded outer popover shape if it is required by the macOS popover/window.
-
-But the INSIDE must still be one continuous white surface.
-
-Do not create an additional rounded white card inside the popover.
-
-The white surface should fill the entire popover content area.
-
-COLORS:
-
-Background:
-#FFFFFF
-
-Separator:
-a very subtle neutral gray, e.g. #E5E5E5
-
-Text:
-existing text color
-
-Line numbers:
-existing muted gray
-
-Do not introduce blue, purple, cyan, gradient, translucency, or vibrancy into the background.
+Implement ONLY the global keyboard shortcut ⌘⇧1.
 
 IMPORTANT:
+The current/original Menote code is working correctly:
+- Spacebar works
+- Normal typing works
+- Existing shortcuts work
+- Menu bar works
+- App lifecycle works
 
-This is NOT asking you to make only the editor white.
+DO NOT modify or replace the existing keyboard/input handling.
 
-I want the WHOLE Menote interface to be white.
+DO NOT use:
+- NSEvent.addLocalMonitorForEvents
+- NSEvent.addGlobalMonitorForEvents
+- a global keyDown monitor
+- any mechanism that intercepts all keyboard events
 
-The toolbar, editor, line-number area, and footer/status area must all be the SAME opaque white background.
+The previous attempt broke Spacebar. Do not repeat that architecture.
 
-Use simple horizontal rules to establish hierarchy.
+USE THE EXISTING HotkeyManager
+================================
 
-Before finishing, run the app and visually verify that placing Menote over:
-- a blue desktop
-- a dark desktop
-- another application
-- an image
+The project already has a HotkeyManager using Carbon HIToolbox / InstallEventHandler.
 
-produces exactly the same solid-white Menote surface.
+Extend the existing HotkeyManager instead of creating a second keyboard system.
 
-The background behind Menote must have ZERO influence on the appearance of the Menote UI.
+Register exactly one new global hotkey:
 
-Do not change functionality while making this change.
+⌘ + Shift + 1
+
+The Carbon key code for the "1" key is:
+
+keyCode = 18
+
+IMPORTANT:
+Do not confuse the physical "1" key with other key codes.
+
+Use the appropriate Carbon modifier mask:
+
+cmdKey | shiftKey
+
+The handler must trigger Menote's existing menu-bar/popover toggle behavior.
+
+ARCHITECTURE
+============
+
+HotkeyManager
+    ↓
+global Carbon hotkey event
+    ↓
+existing Menote/menu-bar action
+    ↓
+toggle Menote popover
+
+Do NOT duplicate the popover logic.
+
+If MenuBarManager already exposes the appropriate action, call that.
+
+If the current architecture requires delegation, add the smallest possible delegate method necessary.
+
+Do not make unrelated architectural changes.
+
+CRITICAL KEYBOARD REQUIREMENT
+==============================
+
+The global shortcut must NOT interfere with normal keyboard input.
+
+⌘⇧1 should be handled by the Carbon global hotkey system.
+
+Normal keyboard events must remain completely untouched.
+
+After implementation, verify:
+
+- Spacebar works
+- normal letters work
+- numbers work
+- Return works
+- Delete works
+- Arrow keys work
+- Tab works
+- ⌘B works
+- ⌘I works
+- ⌘F works
+- existing editor shortcuts work
+- ⌘⇧1 opens/toggles Menote
+
+REGRESSION TEST
+===============
+
+1. Build the app.
+2. Launch it.
+3. Click inside the editor.
+4. Type:
+
+hello world
+
+5. Press Space several times.
+6. Confirm spaces are inserted normally.
+
+7. Type:
+
+one two three
+
+8. Confirm all spaces work.
+
+9. Press ⌘⇧1.
+10. Confirm Menote toggles.
+
+11. Focus another application.
+12. Press ⌘⇧1.
+13. Confirm Menote appears.
+
+14. Return to Menote.
+15. Type normally again.
+16. Confirm Spacebar still works.
+
+IMPORTANT:
+If the shortcut implementation causes ANY normal keyboard input to stop working, revert the shortcut changes immediately and investigate the Carbon implementation.
+
+Do not declare the feature complete until both conditions are true:
+
+1. ⌘⇧1 works globally.
+2. The existing keyboard/editor behavior is completely unchanged.
+
+Build a clean release build after the implementation and report exactly what files were changed.

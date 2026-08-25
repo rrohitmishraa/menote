@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION="1.0.0"
 IDENTIFIER="app.menote.menote"
-APP_NAME="MeNote"
+APP_NAME="Menote"
 APP_PATH="$ROOT/build/$APP_NAME.app"
 PKG_DIR="$ROOT/build/pkg"
 COMPONENT_PKG="$PKG_DIR/${APP_NAME}.pkg"
@@ -33,7 +33,7 @@ pkgbuild \
 cat > "$DISTRIBUTION_XML" <<'DIST'
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>MeNote</title>
+    <title>Menote</title>
     <organization>app.menote</organization>
     <domains enable_localSystem="true" enable_currentUserHome="true" enable_anywhere="false"/>
     <options customize="never" require-scripts="false" rootVolumeOnly="false"/>
@@ -42,23 +42,23 @@ cat > "$DISTRIBUTION_XML" <<'DIST'
     function pm_install_check() {
         if (!(system.compareVersions(system.version.ProductVersion, '13.0') >= 0)) {
             my.result.title = 'Installation Failed';
-            my.result.message = 'MeNote requires macOS 13.0 or later.';
+            my.result.message = 'Menote requires macOS 13.0 or later.';
             my.result.type = 'Fatal';
             return false;
         }
         return true;
     }
     </script>
-    <pkg-ref id="app.menote.menote">#MeNote.pkg</pkg-ref>
+    <pkg-ref id="app.menote.menote">#Menote.pkg</pkg-ref>
     <choices-outline>
         <line choice="default">
             <line choice="app.menote.menote"/>
         </line>
     </choices-outline>
-    <choice id="default" title="MeNote" description="A simple note-taking app for your notch.">
+    <choice id="default" title="Menote" description="A simple note-taking app for your notch.">
         <pkg-ref id="app.menote.menote"/>
     </choice>
-    <choice id="app.menote.menote" title="MeNote" description="MeNote Application" start_selected="true" start_enabled="true" start_visible="true">
+    <choice id="app.menote.menote" title="Menote" description="Menote Application" start_selected="true" start_enabled="true" start_visible="true">
         <pkg-ref id="app.menote.menote"/>
     </choice>
 </installer-gui-script>

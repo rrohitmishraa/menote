@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 protocol MenuBarManagerDelegate: AnyObject {
     func menuBarDidRequestNewNote()
@@ -24,10 +24,10 @@ final class MenuBarManager {
             logo.isTemplate = false
             item.button?.image = logo
         } else {
-            item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "MeNote")
+            item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: "Menote")
             item.button?.image?.isTemplate = true
         }
-        item.button?.toolTip = "MeNote"
+        item.button?.toolTip = "Menote"
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked(_:))
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -79,9 +79,9 @@ final class MenuBarManager {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "About MeNote", action: #selector(aboutAction(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "About Menote", action: #selector(aboutAction(_:)), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit MeNote", action: #selector(quitAction(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Menote", action: #selector(quitAction(_:)), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
 
         if let event = NSApp.currentEvent, let button = statusItem?.button {

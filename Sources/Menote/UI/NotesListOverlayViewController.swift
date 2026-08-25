@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 final class NotesListOverlayViewController: NSViewController, NSMenuDelegate {
     private let store: NoteStore

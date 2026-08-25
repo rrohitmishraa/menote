@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 final class LineNumberView: NSView {
     weak var textView: EditorTextView?

@@ -68,10 +68,10 @@ public final class JSONPersistence {
             }
         }
         
-        // Same-format migration: copy the previous "NotchPad" data folder into the new location.
+        // Same-format migration: copy the previous "Menote" data folder into the new location.
         let supportURL = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let previousFolder = supportURL.appendingPathComponent("NotchPad", isDirectory: true)
+        let previousFolder = supportURL.appendingPathComponent("Menote", isDirectory: true)
         
         if !fm.fileExists(atPath: layout.baseURL.path),
            fm.fileExists(atPath: previousFolder.path) {
@@ -88,8 +88,8 @@ public final class JSONPersistence {
         
         // Fallback: Try to migrate from known old locations
         let oldLocations = [
-            supportURL.appendingPathComponent("MeNote/notes.json"),
-            supportURL.appendingPathComponent("NotchPad/notes.json"),
+            supportURL.appendingPathComponent("Menote/notes.json"),
+            supportURL.appendingPathComponent("Menote/notes.json"),
         ]
         
         for oldURL in oldLocations {

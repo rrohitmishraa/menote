@@ -76,9 +76,9 @@ public final class AppSettings {
     }
 }
 
-private let kAccessPoint = "NotchPad.accessPoint" as NSString
-private let kAppearance = "NotchPad.appearance" as NSString
-private let kLaunchAtLogin = "NotchPad.launchAtLogin" as NSString
-private let kClipboardHistoryEnabled = "NotchPad.clipboardHistoryEnabled" as NSString
-private let kClipboardLimit = "NotchPad.clipboardLimit" as NSString
-private let kSettingsDidChange = "NotchPadSettingsDidChange" as NSString
+private let kAccessPoint = "Menote.accessPoint" as NSString
+private let kAppearance = "Menote.appearance" as NSString
+private let kLaunchAtLogin = "Menote.launchAtLogin" as NSString
+private let kClipboardHistoryEnabled = "Menote.clipboardHistoryEnabled" as NSString
+private let kClipboardLimit = "Menote.clipboardLimit" as NSString
+private let kSettingsDidChange = "MenoteSettingsDidChange" as NSString

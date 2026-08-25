@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG="${1:-release}"
-APP="$ROOT/build/MeNote.app"
+APP="$ROOT/build/Menote.app"
 
 cd "$ROOT"
 
@@ -15,7 +15,7 @@ BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BIN/menote" "$APP/Contents/MacOS/MeNote"
+cp "$BIN/menote" "$APP/Contents/MacOS/Menote"
 cp "$ROOT/logo.png" "$APP/Contents/Resources/logo.png"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
@@ -24,9 +24,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>MeNote</string>
+    <string>Menote</string>
     <key>CFBundleDisplayName</key>
-    <string>MeNote</string>
+    <string>Menote</string>
     <key>CFBundleIdentifier</key>
     <string>app.menote.menote</string>
     <key>CFBundleVersion</key>
@@ -36,7 +36,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>MeNote</string>
+    <string>Menote</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>

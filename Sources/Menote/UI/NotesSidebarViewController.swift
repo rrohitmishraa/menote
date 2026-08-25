@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 protocol NotesSidebarDelegate: AnyObject {
     func sidebarDidSelectNote(_ note: Note)

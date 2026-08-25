@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 final class AppCoordinator: MenuBarManagerDelegate {
     let settings = AppSettings.shared

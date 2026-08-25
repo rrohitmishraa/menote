@@ -127,6 +127,6 @@ extension JSONPersistence {
     }()
 }
 
-private let kStorageDidChange = "NotchPadStorageDidChange" as NSString
-private let kAvailabilityDidChange = "NotchPadStorageAvailabilityDidChange" as NSString
-private let kErrorDomain = "NotchPadStorage" as NSString
+private let kStorageDidChange = "MenoteStorageDidChange" as NSString
+private let kAvailabilityDidChange = "MenoteStorageAvailabilityDidChange" as NSString
+private let kErrorDomain = "MenoteStorage" as NSString

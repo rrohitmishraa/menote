@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 protocol NotchPanelControllerDelegate: AnyObject {
     func notchPanelWillExpand(_ controller: NotchPanelController)

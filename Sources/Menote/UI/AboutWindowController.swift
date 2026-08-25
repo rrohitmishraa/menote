@@ -1,5 +1,5 @@
 import AppKit
-import NotchPadCore
+import MenoteCore
 
 final class AboutWindowController: NSWindowController {
     private var launchCheckbox: NSButton?
