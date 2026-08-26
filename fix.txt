@@ -1,126 +1,37 @@
-Implement ONLY the global keyboard shortcut ⌘⇧1.
+Increase Menote's undo history to 500 steps.
+
+The current undo implementation is working correctly. DO NOT rewrite it.
+
+Use the existing native undo system and simply increase its history capacity to 500 undoable operations.
+
+500 is the minimum target.
+
+If the existing implementation naturally supports unlimited undo without storing full document snapshots, do not artificially impose a 500-step limit.
 
 IMPORTANT:
-The current/original Menote code is working correctly:
-- Spacebar works
-- Normal typing works
-- Existing shortcuts work
-- Menu bar works
-- App lifecycle works
+Performance matters more than the exact number.
 
-DO NOT modify or replace the existing keyboard/input handling.
+Do NOT store a complete copy of the entire document for every undo step if the current architecture can record incremental text mutations instead.
 
-DO NOT use:
-- NSEvent.addLocalMonitorForEvents
-- NSEvent.addGlobalMonitorForEvents
-- a global keyDown monitor
-- any mechanism that intercepts all keyboard events
+The editor must remain responsive while:
+- typing
+- deleting
+- undoing
+- redoing
+- working with large documents
 
-The previous attempt broke Spacebar. Do not repeat that architecture.
+Test with at least 500 consecutive edits.
 
-USE THE EXISTING HotkeyManager
-================================
+Verify:
+⌘Z can walk backward through the history.
+⇧⌘Z can walk forward again.
 
-The project already has a HotkeyManager using Carbon HIToolbox / InstallEventHandler.
+Do not modify:
+- list behavior
+- deletion behavior
+- paste behavior
+- Enter/Shift+Enter
+- formatting
+- UI
 
-Extend the existing HotkeyManager instead of creating a second keyboard system.
-
-Register exactly one new global hotkey:
-
-⌘ + Shift + 1
-
-The Carbon key code for the "1" key is:
-
-keyCode = 18
-
-IMPORTANT:
-Do not confuse the physical "1" key with other key codes.
-
-Use the appropriate Carbon modifier mask:
-
-cmdKey | shiftKey
-
-The handler must trigger Menote's existing menu-bar/popover toggle behavior.
-
-ARCHITECTURE
-============
-
-HotkeyManager
-    ↓
-global Carbon hotkey event
-    ↓
-existing Menote/menu-bar action
-    ↓
-toggle Menote popover
-
-Do NOT duplicate the popover logic.
-
-If MenuBarManager already exposes the appropriate action, call that.
-
-If the current architecture requires delegation, add the smallest possible delegate method necessary.
-
-Do not make unrelated architectural changes.
-
-CRITICAL KEYBOARD REQUIREMENT
-==============================
-
-The global shortcut must NOT interfere with normal keyboard input.
-
-⌘⇧1 should be handled by the Carbon global hotkey system.
-
-Normal keyboard events must remain completely untouched.
-
-After implementation, verify:
-
-- Spacebar works
-- normal letters work
-- numbers work
-- Return works
-- Delete works
-- Arrow keys work
-- Tab works
-- ⌘B works
-- ⌘I works
-- ⌘F works
-- existing editor shortcuts work
-- ⌘⇧1 opens/toggles Menote
-
-REGRESSION TEST
-===============
-
-1. Build the app.
-2. Launch it.
-3. Click inside the editor.
-4. Type:
-
-hello world
-
-5. Press Space several times.
-6. Confirm spaces are inserted normally.
-
-7. Type:
-
-one two three
-
-8. Confirm all spaces work.
-
-9. Press ⌘⇧1.
-10. Confirm Menote toggles.
-
-11. Focus another application.
-12. Press ⌘⇧1.
-13. Confirm Menote appears.
-
-14. Return to Menote.
-15. Type normally again.
-16. Confirm Spacebar still works.
-
-IMPORTANT:
-If the shortcut implementation causes ANY normal keyboard input to stop working, revert the shortcut changes immediately and investigate the Carbon implementation.
-
-Do not declare the feature complete until both conditions are true:
-
-1. ⌘⇧1 works globally.
-2. The existing keyboard/editor behavior is completely unchanged.
-
-Build a clean release build after the implementation and report exactly what files were changed.
+Only increase/optimize the existing undo history.

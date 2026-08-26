@@ -14,7 +14,7 @@ enum Theme {
         NSColor(srgbRed: 0.05, green: 0.05, blue: 0.06, alpha: 1)
     }
 
-    static var editorFont: NSFont { .systemFont(ofSize: 18) }
+    static var editorFont: NSFont { .systemFont(ofSize: 16) }
     static var codeFont: NSFont { .monospacedSystemFont(ofSize: 13, weight: .regular) }
 
     static func formatSavedDate(_ date: Date) -> String {

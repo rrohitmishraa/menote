@@ -19,7 +19,7 @@ final class LineNumberView: NSView {
 
         guard let layoutManager = textView.layoutManager else { return }
 
-        let editorFont = textView.font ?? NSFont.systemFont(ofSize: 18)
+        let editorFont = textView.font ?? NSFont.systemFont(ofSize: 16)
         let gutterFont = NSFont.systemFont(ofSize: max(editorFont.pointSize - 4, 11), weight: .regular)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: gutterFont,
@@ -125,21 +125,69 @@ final class HoverButton: NSButton {
     }
 }
 
+private extension NSString {
+    func currentLineRange(for position: Int) -> NSRange {
+        let start = lineRange(for: NSRange(location: position, length: 0)).location
+        var end = start
+        if position < length {
+            end = lineRange(for: NSRange(location: position, length: 0)).upperBound
+        } else {
+            end = length
+        }
+        if end > start && character(at: end - 1) == UInt16(UnicodeScalar("\n").value) {
+            end -= 1
+        }
+        return NSRange(location: start, length: end - start)
+    }
+
+    func rangeOfWordBackward(before cursor: Int) -> NSRange {
+        guard cursor > 0 else { return NSRange(location: NSNotFound, length: 0) }
+        let line = currentLineRange(for: cursor)
+        guard cursor > line.location else { return NSRange(location: NSNotFound, length: 0) }
+        let searchRange = NSRange(location: line.location, length: cursor - line.location)
+        var wordRange = NSRange(location: NSNotFound, length: 0)
+        enumerateSubstrings(in: searchRange, options: .byWords) { _, substringRange, _, stop in
+            if substringRange.upperBound <= cursor {
+                wordRange = substringRange
+            }
+            if substringRange.upperBound >= cursor {
+                stop.pointee = true
+            }
+        }
+        return wordRange
+    }
+
+    func rangeOfWordForward(after cursor: Int) -> NSRange {
+        guard cursor < length else { return NSRange(location: NSNotFound, length: 0) }
+        let line = currentLineRange(for: cursor)
+        guard cursor < line.upperBound else { return NSRange(location: NSNotFound, length: 0) }
+        let searchRange = NSRange(location: cursor, length: line.upperBound - cursor)
+        var wordRange = NSRange(location: NSNotFound, length: 0)
+        enumerateSubstrings(in: searchRange, options: .byWords) { _, substringRange, _, stop in
+            wordRange = substringRange
+            stop.pointee = true
+        }
+        return wordRange
+    }
+}
+
 final class EditorTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
 
-    var interceptNewline: (() -> Bool)?
+    var interceptNewline: ((NSEvent) -> Bool)?
     var onEscape: (() -> Bool)?
     var onArrowKey: ((NSEvent) -> Bool)?
 
-    private let baseFont: NSFont = .systemFont(ofSize: 18)
+    private let baseFont: NSFont = .systemFont(ofSize: 16)
+    private var currentEvent: NSEvent?
 
     override func insertNewline(_ sender: Any?) {
-        if interceptNewline?() == true { return }
+        if let event = currentEvent, interceptNewline?(event) == true { return }
         super.insertNewline(sender)
     }
 
     override func keyDown(with event: NSEvent) {
+        currentEvent = event
         if event.keyCode == 53 {
             if onEscape?() == true { return }
         }
@@ -147,33 +195,23 @@ final class EditorTextView: NSTextView {
             if onArrowKey?(event) == true { return }
         }
         super.keyDown(with: event)
+        currentEvent = nil
     }
 
     func toggleTrait(_ trait: NSFontTraitMask) {
         let manager = NSFontManager.shared
-        guard let storage = textStorage else { return }
         let selected = selectedRange()
         if selected.length > 0 {
-            // Coordinate through NSTextView so the formatting change is recorded as a
-            // normal undoable operation in its NSUndoManager (⌘Z / ⇧⌘Z).
-            if shouldChangeText(in: selected, replacementString: nil) {
-                storage.beginEditing()
-                var index = selected.location
-                let end = selected.upperBound
-                while index < end {
-                    var effective = NSRange()
-                    let attributes = storage.attributes(at: index, effectiveRange: &effective)
-                    let font = (attributes[.font] as? NSFont) ?? baseFont
-                    let has = manager.traits(of: font).contains(trait)
-                    let newFont = has
-                        ? manager.convert(font, toNotHaveTrait: trait)
-                        : manager.convert(font, toHaveTrait: trait)
-                    storage.addAttribute(.font, value: newFont, range: NSIntersectionRange(effective, selected))
-                    index = NSMaxRange(effective)
-                }
-                storage.endEditing()
-                didChangeText()
+            guard let attrStr = textStorage?.attributedSubstring(from: selected).mutableCopy() as? NSMutableAttributedString else { return }
+            attrStr.enumerateAttribute(.font, in: NSRange(location: 0, length: attrStr.length)) { value, range, _ in
+                let font = (value as? NSFont) ?? self.baseFont
+                let has = manager.traits(of: font).contains(trait)
+                let newFont = has
+                    ? manager.convert(font, toNotHaveTrait: trait)
+                    : manager.convert(font, toHaveTrait: trait)
+                attrStr.addAttribute(.font, value: newFont, range: range)
             }
+            insertText(attrStr, replacementRange: selected)
         } else {
             var attrs = typingAttributes
             let font = (attrs[.font] as? NSFont) ?? baseFont
@@ -185,6 +223,41 @@ final class EditorTextView: NSTextView {
             typingAttributes = attrs
         }
         needsDisplay = true
+    }
+
+    override func paste(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        if let text = pb.string(forType: .string) {
+            let selected = selectedRange()
+            let attrStr = NSAttributedString(string: text, attributes: [.font: baseFont])
+            insertText(attrStr, replacementRange: selected)
+            let newLocation = selected.location + (text as NSString).length
+            setSelectedRange(NSRange(location: newLocation, length: 0))
+        } else {
+            super.paste(sender)
+        }
+    }
+
+    override func deleteWordBackward(_ sender: Any?) {
+        let cursor = selectedRange().location
+        guard cursor > 0, let storage = textStorage, storage.length > 0 else { return }
+        let ns = string as NSString
+        let wordRange = ns.rangeOfWordBackward(before: cursor)
+        guard wordRange.length > 0 else { return }
+        let deleteRange = NSRange(location: wordRange.location, length: cursor - wordRange.location)
+        insertText(NSAttributedString(), replacementRange: deleteRange)
+        setSelectedRange(NSRange(location: wordRange.location, length: 0))
+    }
+
+    override func deleteWordForward(_ sender: Any?) {
+        let cursor = selectedRange().location
+        guard let storage = textStorage, cursor < storage.length else { return }
+        let ns = string as NSString
+        let wordRange = ns.rangeOfWordForward(after: cursor)
+        guard wordRange.length > 0 else { return }
+        let deleteRange = NSRange(location: cursor, length: wordRange.upperBound - cursor)
+        insertText(NSAttributedString(), replacementRange: deleteRange)
+        setSelectedRange(NSRange(location: cursor, length: 0))
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -384,8 +457,6 @@ final class ScratchpadViewController: NSViewController {
 
     // Slash commands
     private let slashPopup = SlashCommandPopup()
-    private var isInList = false
-    private var listPrefix = ""
 
     // Color palette
     private var colorStrip: NSStackView!
@@ -459,7 +530,7 @@ final class ScratchpadViewController: NSViewController {
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
-        textView.font = .systemFont(ofSize: 18)
+        textView.font = .systemFont(ofSize: 16)
         textView.textColor = .labelColor
         textView.insertionPointColor = .controlAccentColor
         textView.isRichText = true
@@ -471,6 +542,7 @@ final class ScratchpadViewController: NSViewController {
         textView.isContinuousSpellCheckingEnabled = true
         textView.isAutomaticLinkDetectionEnabled = true
         textView.allowsUndo = true
+        textView.undoManager?.levelsOfUndo = 500
         textView.drawsBackground = true
         textView.isEditable = true
         textView.isSelectable = true
@@ -478,7 +550,7 @@ final class ScratchpadViewController: NSViewController {
         textView.textContainerInset = NSSize(width: 28, height: 24)
         textView.typingAttributes = [
             .foregroundColor: NSColor.labelColor,
-            .font: NSFont.systemFont(ofSize: 18)
+            .font: NSFont.systemFont(ofSize: 16)
         ]
         textView.linkTextAttributes = [
             .foregroundColor: NSColor.controlAccentColor,
@@ -487,8 +559,8 @@ final class ScratchpadViewController: NSViewController {
         textView.delegate = self
         textView.setAccessibilityIdentifier("editor-text")
 
-        textView.interceptNewline = { [weak self] in
-            self?.handleNewline() ?? false
+        textView.interceptNewline = { [weak self] event in
+            self?.handleNewline(event: event) ?? false
         }
         textView.onEscape = { [weak self] in
             guard let self, self.slashPopup.isShown else { return false }
@@ -723,13 +795,13 @@ final class ScratchpadViewController: NSViewController {
             let string = store.currentNote?.plainText ?? store.draftText
             textView.textStorage?.setAttributedString(NSAttributedString(
                 string: string,
-                attributes: [.font: NSFont.systemFont(ofSize: 18),
+                attributes: [.font: NSFont.systemFont(ofSize: 16),
                              .foregroundColor: NSColor.labelColor]))
         }
         updatePlaceholder()
         textView.scrollToBeginningOfDocument(nil)
         textView.typingAttributes = [.foregroundColor: NSColor.labelColor,
-                                     .font: NSFont.systemFont(ofSize: 18)]
+                                     .font: NSFont.systemFont(ofSize: 16)]
         isLoadingContent = false
         resizeEditorToContent()
         lineNumberView?.needsDisplay = true
@@ -747,7 +819,7 @@ final class ScratchpadViewController: NSViewController {
             var next = attributes
             if let font = attributes[.font] as? NSFont {
                 let traits = manager.traits(of: font)
-                var normalized = NSFont.systemFont(ofSize: 18)
+                var normalized = NSFont.systemFont(ofSize: 16)
                 if traits.contains(.boldFontMask) {
                     normalized = manager.convert(normalized, toHaveTrait: .boldFontMask)
                 }
@@ -756,7 +828,7 @@ final class ScratchpadViewController: NSViewController {
                 }
                 next[.font] = normalized
             } else {
-                next[.font] = NSFont.systemFont(ofSize: 18)
+                next[.font] = NSFont.systemFont(ofSize: 16)
             }
             let substring = attr.attributedSubstring(from: effective).string
             result.append(NSAttributedString(string: substring, attributes: next))
@@ -846,7 +918,7 @@ final class ScratchpadViewController: NSViewController {
         store.beginDraft()
         textView.textStorage?.setAttributedString(NSAttributedString(string: ""))
         textView.typingAttributes = [.foregroundColor: NSColor.labelColor,
-                                     .font: NSFont.systemFont(ofSize: 18)]
+                                     .font: NSFont.systemFont(ofSize: 16)]
         updatePlaceholder()
         lineNumberView?.needsDisplay = true
         applyFocus(.editor)
@@ -885,7 +957,7 @@ final class ScratchpadViewController: NSViewController {
         return ns.substring(with: range).trimmingCharacters(in: .newlines)
     }
 
-    private func handleNewline() -> Bool {
+    private func handleNewline(event: NSEvent) -> Bool {
         if slashPopup.isShown {
             slashPopup.executeSelected()
             return true
@@ -898,16 +970,46 @@ final class ScratchpadViewController: NSViewController {
             return true
         }
 
-        if isInList {
-            if line.trimmingCharacters(in: .whitespaces).isEmpty || line == listPrefix {
-                exitList()
-                return true
+        if let nextPrefix = listNextPrefix(for: line) {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            if parts.count == 1 {
+                return false
             }
-            continueList()
+            if event.modifierFlags.contains(.shift) {
+                return false
+            }
+            continueList(with: nextPrefix)
             return true
         }
 
         return false
+    }
+
+    private func listNextPrefix(for line: String) -> String? {
+        let parts = line.split(separator: " ", maxSplits: 1)
+        guard let firstPart = parts.first else { return nil }
+        let prefix = String(firstPart)
+
+        if prefix.hasSuffix("."), let num = Int(prefix.dropLast()) {
+            return "\(num + 1). "
+        }
+
+        if prefix.count == 2, prefix.hasSuffix("."),
+           let letter = prefix.first, letter.isLetter, letter.isLowercase {
+            let next: Character = letter == "z" ? "a" : Character(UnicodeScalar(letter.unicodeScalars.first!.value + 1)!)
+            return "\(next). "
+        }
+
+        if prefix.count == 2, prefix.hasSuffix("."),
+           let letter = prefix.first, letter.isLetter, letter.isUppercase {
+            let next: Character = letter == "Z" ? "A" : Character(UnicodeScalar(letter.unicodeScalars.first!.value + 1)!)
+            return "\(next). "
+        }
+
+        if prefix == "-" { return "- " }
+        if prefix == "*" { return "* " }
+
+        return nil
     }
 
     private func slashCommand(in line: String) -> String? {
@@ -919,28 +1021,27 @@ final class ScratchpadViewController: NSViewController {
 
     private func executeSlashCommand(_ command: String) {
         let lineRange = currentLineRange()
+        let lineStr = (textView.string as NSString).substring(with: lineRange)
+        let hasTrailingNewline = lineStr.hasSuffix("\n")
         textView.undoManager?.beginUndoGrouping()
 
         switch command {
         case "/line":
             let separator = String(repeating: "=", count: 30)
-            textView.replaceCharacters(in: lineRange, with: separator)
-            isInList = false
-            listPrefix = ""
+            let replacement = hasTrailingNewline ? separator + "\n" : separator
+            textView.replaceCharacters(in: lineRange, with: replacement)
 
         case "/list":
-            let bullet = "• "
-            textView.replaceCharacters(in: lineRange, with: bullet)
-            isInList = true
-            listPrefix = bullet
+            let bullet = "- "
+            let replacement = hasTrailingNewline ? bullet + "\n" : bullet
+            textView.replaceCharacters(in: lineRange, with: replacement)
             let cursor = lineRange.location + (bullet as NSString).length
             textView.setSelectedRange(NSRange(location: cursor, length: 0))
 
         case "/number":
             let numbered = "1. "
-            textView.replaceCharacters(in: lineRange, with: numbered)
-            isInList = true
-            listPrefix = numbered
+            let replacement = hasTrailingNewline ? numbered + "\n" : numbered
+            textView.replaceCharacters(in: lineRange, with: replacement)
             let cursor = lineRange.location + (numbered as NSString).length
             textView.setSelectedRange(NSRange(location: cursor, length: 0))
 
@@ -955,53 +1056,16 @@ final class ScratchpadViewController: NSViewController {
         notifyTextChange()
     }
 
-    private func continueList() {
-        let ns = textView.string as NSString
+    private func continueList(with nextPrefix: String) {
         let cursor = textView.selectedRange().location
-        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+        let insertText = "\n" + nextPrefix
 
-        var nextPrefix: String
-        if listPrefix.hasPrefix("• ") {
-            nextPrefix = "• "
-        } else if listPrefix.first?.isNumber == true {
-            let numStr = String(listPrefix.prefix(while: { $0 != "." }))
-            if let num = Int(numStr) {
-                nextPrefix = "\(num + 1). "
-            } else {
-                nextPrefix = "1. "
-            }
-        } else {
-            nextPrefix = listPrefix
-        }
-
-        let lineStr = ns.substring(with: lineRange)
-        let hasTrailingNewline = lineStr.hasSuffix("\n")
-        let insertText = hasTrailingNewline ? nextPrefix : "\n" + nextPrefix
-        let insertPos = lineRange.upperBound
         textView.undoManager?.beginUndoGrouping()
-        textView.replaceCharacters(in: NSRange(location: insertPos, length: 0), with: insertText)
+        textView.replaceCharacters(in: NSRange(location: cursor, length: 0), with: insertText)
         textView.undoManager?.endUndoGrouping()
-        listPrefix = nextPrefix
 
-        let newCursor = insertPos + (insertText as NSString).length
+        let newCursor = cursor + (insertText as NSString).length
         textView.setSelectedRange(NSRange(location: newCursor, length: 0))
-        resizeEditorToContent()
-        lineNumberView?.needsDisplay = true
-        notifyTextChange()
-    }
-
-    private func exitList() {
-        let ns = textView.string as NSString
-        let cursor = textView.selectedRange().location
-        let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
-
-        textView.undoManager?.beginUndoGrouping()
-        textView.replaceCharacters(in: lineRange, with: "")
-        textView.undoManager?.endUndoGrouping()
-
-        isInList = false
-        listPrefix = ""
-        textView.setSelectedRange(NSRange(location: lineRange.location, length: 0))
         resizeEditorToContent()
         lineNumberView?.needsDisplay = true
         notifyTextChange()
@@ -1055,11 +1119,9 @@ final class ScratchpadViewController: NSViewController {
         let selectedRange = textView.selectedRange()
 
         if selectedRange.length > 0 {
-            if textView.shouldChangeText(in: selectedRange, replacementString: nil) {
-                textView.textStorage?.beginEditing()
-                textView.textStorage?.addAttribute(.foregroundColor, value: resolvedColor, range: selectedRange)
-                textView.textStorage?.endEditing()
-                textView.didChangeText()
+            if let attrStr = textView.textStorage?.attributedSubstring(from: selectedRange).mutableCopy() as? NSMutableAttributedString {
+                attrStr.addAttribute(.foregroundColor, value: resolvedColor, range: NSRange(location: 0, length: attrStr.length))
+                textView.insertText(attrStr, replacementRange: selectedRange)
             }
         } else {
             textView.typingAttributes[.foregroundColor] = resolvedColor
