@@ -125,51 +125,7 @@ final class HoverButton: NSButton {
     }
 }
 
-private extension NSString {
-    func currentLineRange(for position: Int) -> NSRange {
-        let start = lineRange(for: NSRange(location: position, length: 0)).location
-        var end = start
-        if position < length {
-            end = lineRange(for: NSRange(location: position, length: 0)).upperBound
-        } else {
-            end = length
-        }
-        if end > start && character(at: end - 1) == UInt16(UnicodeScalar("\n").value) {
-            end -= 1
-        }
-        return NSRange(location: start, length: end - start)
-    }
 
-    func rangeOfWordBackward(before cursor: Int) -> NSRange {
-        guard cursor > 0 else { return NSRange(location: NSNotFound, length: 0) }
-        let line = currentLineRange(for: cursor)
-        guard cursor > line.location else { return NSRange(location: NSNotFound, length: 0) }
-        let searchRange = NSRange(location: line.location, length: cursor - line.location)
-        var wordRange = NSRange(location: NSNotFound, length: 0)
-        enumerateSubstrings(in: searchRange, options: .byWords) { _, substringRange, _, stop in
-            if substringRange.upperBound <= cursor {
-                wordRange = substringRange
-            }
-            if substringRange.upperBound >= cursor {
-                stop.pointee = true
-            }
-        }
-        return wordRange
-    }
-
-    func rangeOfWordForward(after cursor: Int) -> NSRange {
-        guard cursor < length else { return NSRange(location: NSNotFound, length: 0) }
-        let line = currentLineRange(for: cursor)
-        guard cursor < line.upperBound else { return NSRange(location: NSNotFound, length: 0) }
-        let searchRange = NSRange(location: cursor, length: line.upperBound - cursor)
-        var wordRange = NSRange(location: NSNotFound, length: 0)
-        enumerateSubstrings(in: searchRange, options: .byWords) { _, substringRange, _, stop in
-            wordRange = substringRange
-            stop.pointee = true
-        }
-        return wordRange
-    }
-}
 
 final class EditorTextView: NSTextView {
     override var acceptsFirstResponder: Bool { true }
@@ -212,6 +168,7 @@ final class EditorTextView: NSTextView {
                 attrStr.addAttribute(.font, value: newFont, range: range)
             }
             insertText(attrStr, replacementRange: selected)
+            setSelectedRange(selected) // Restore the selection
         } else {
             var attrs = typingAttributes
             let font = (attrs[.font] as? NSFont) ?? baseFont
@@ -239,26 +196,22 @@ final class EditorTextView: NSTextView {
     }
 
     override func deleteWordBackward(_ sender: Any?) {
-        let cursor = selectedRange().location
-        guard cursor > 0, let storage = textStorage, storage.length > 0 else { return }
+        let sel = selectedRange()
+        guard sel.length == 0, sel.location > 0, let storage = textStorage, storage.length > 0 else {
+            super.deleteWordBackward(sender)
+            return
+        }
         let ns = string as NSString
-        let wordRange = ns.rangeOfWordBackward(before: cursor)
-        guard wordRange.length > 0 else { return }
-        let deleteRange = NSRange(location: wordRange.location, length: cursor - wordRange.location)
-        insertText(NSAttributedString(), replacementRange: deleteRange)
-        setSelectedRange(NSRange(location: wordRange.location, length: 0))
+        let charBefore = ns.character(at: sel.location - 1)
+        if charBefore == UInt16(UnicodeScalar("\n").value) {
+            insertText(NSAttributedString(), replacementRange: NSRange(location: sel.location - 1, length: 1))
+            setSelectedRange(NSRange(location: sel.location - 1, length: 0))
+        } else {
+            super.deleteWordBackward(sender)
+        }
     }
 
-    override func deleteWordForward(_ sender: Any?) {
-        let cursor = selectedRange().location
-        guard let storage = textStorage, cursor < storage.length else { return }
-        let ns = string as NSString
-        let wordRange = ns.rangeOfWordForward(after: cursor)
-        guard wordRange.length > 0 else { return }
-        let deleteRange = NSRange(location: cursor, length: wordRange.upperBound - cursor)
-        insertText(NSAttributedString(), replacementRange: deleteRange)
-        setSelectedRange(NSRange(location: cursor, length: 0))
-    }
+
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
@@ -1122,6 +1075,7 @@ final class ScratchpadViewController: NSViewController {
             if let attrStr = textView.textStorage?.attributedSubstring(from: selectedRange).mutableCopy() as? NSMutableAttributedString {
                 attrStr.addAttribute(.foregroundColor, value: resolvedColor, range: NSRange(location: 0, length: attrStr.length))
                 textView.insertText(attrStr, replacementRange: selectedRange)
+                textView.setSelectedRange(selectedRange) // Restore the selection
             }
         } else {
             textView.typingAttributes[.foregroundColor] = resolvedColor

@@ -11,6 +11,8 @@ public final class NoteStore {
     private let queue = DispatchQueue(label: "app.notchpad.store", qos: .userInitiated)
     private let persistence: JSONPersistence
     private let storageManager: StorageManager
+    private let markdownPersistence: MarkdownPersistence?
+    private let fileLocationManager: FileLocationManager?
 
     public private(set) var notes: [Note] = []
     public private(set) var currentNoteID: UUID?
@@ -26,9 +28,16 @@ public final class NoteStore {
 
     private var pendingAutosave: DispatchWorkItem?
 
-    public init(persistence: JSONPersistence, storageManager: StorageManager) {
+    public init(
+        persistence: JSONPersistence,
+        storageManager: StorageManager,
+        markdownPersistence: MarkdownPersistence? = nil,
+        fileLocationManager: FileLocationManager? = nil
+    ) {
         self.persistence = persistence
         self.storageManager = storageManager
+        self.markdownPersistence = markdownPersistence
+        self.fileLocationManager = fileLocationManager
     }
     
     public var isStorageAvailable: Bool {
@@ -38,6 +47,11 @@ public final class NoteStore {
     // MARK: - Loading
 
     public func loadFromDisk() {
+        if let markdownPersistence, let fileURL = (try? fileLocationManager?.getSavedFileLocation()) ?? nil {
+            loadFromMarkdown(markdownPersistence, fileURL: fileURL)
+            return
+        }
+
         var loadedNotes: [Note] = []
         var hadError = false
         queue.sync {
@@ -57,6 +71,24 @@ public final class NoteStore {
             saveStatus = .idle
         }
         notesChanged?()
+        statusChanged?()
+    }
+
+    private func loadFromMarkdown(_ markdownPersistence: MarkdownPersistence, fileURL: URL) {
+        do {
+            let note = try markdownPersistence.loadNote(from: fileURL)
+            notes = note.map { [$0] } ?? []
+            currentNoteID = note?.id
+            draftText = ""
+            loadHadError = false
+            saveStatus = .idle
+        } catch {
+            // Never replace an unreadable document with an empty one.
+            loadHadError = true
+            saveStatus = .failed("Could not read Menote.md — data NOT overwritten.")
+        }
+        notesChanged?()
+        currentNoteChanged?()
         statusChanged?()
     }
 
@@ -220,6 +252,18 @@ public final class NoteStore {
         pendingAutosave = nil
 
         guard !loadHadError else { return }
+
+        if let markdownPersistence,
+           let fileURL = (try? fileLocationManager?.getSavedFileLocation()) ?? nil {
+            setStatus(.saving)
+            do {
+                try markdownPersistence.saveNote(currentNote, draftText: draftText, to: fileURL)
+                setStatus(.saved(Date()))
+            } catch {
+                setStatus(.failed(error.localizedDescription))
+            }
+            return
+        }
 
         switch storageManager.checkAvailability() {
         case .available:

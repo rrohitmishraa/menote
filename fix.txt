@@ -1,37 +1,783 @@
-Increase Menote's undo history to 500 steps.
-
-The current undo implementation is working correctly. DO NOT rewrite it.
-
-Use the existing native undo system and simply increase its history capacity to 500 undoable operations.
-
-500 is the minimum target.
-
-If the existing implementation naturally supports unlimited undo without storing full document snapshots, do not artificially impose a 500-step limit.
+MENOTE V2 — COMPLETE DOCUMENT STORAGE ARCHITECTURE CHANGE
 
 IMPORTANT:
-Performance matters more than the exact number.
+This is a storage architecture change.
 
-Do NOT store a complete copy of the entire document for every undo step if the current architecture can record incremental text mutations instead.
+DO NOT redesign the UI.
+DO NOT rewrite the editor.
+DO NOT modify existing keyboard behavior.
+DO NOT "clean up" unrelated code.
+DO NOT change working V1 functionality.
 
-The editor must remain responsive while:
-- typing
-- deleting
-- undoing
-- redoing
-- working with large documents
+The current V2 implementation uses a `.md` file with readable content plus serialized metadata at the bottom.
 
-Test with at least 500 consecutive edits.
+We are changing that architecture completely.
 
-Verify:
-⌘Z can walk backward through the history.
-⇧⌘Z can walk forward again.
+==================================================
+NEW FILE FORMAT
+==================================================
 
-Do not modify:
-- list behavior
-- deletion behavior
-- paste behavior
-- Enter/Shift+Enter
-- formatting
-- UI
+STOP using `.md`.
 
-Only increase/optimize the existing undo history.
+Menote will now use its own document file extension:
+
+.menote
+
+Example:
+
+Menote.menote
+
+This file is the user's actual Menote document.
+
+The `.menote` file is the PRIMARY SOURCE OF TRUTH.
+
+It is NOT a temporary file.
+
+It is NOT a backup.
+
+It is NOT a cache.
+
+It is NOT a secondary copy of the document.
+
+==================================================
+WHY WE ARE CHANGING THIS
+==================================================
+
+The current `.md` approach has two different types of information:
+
+1. Human-readable Markdown document
+2. Serialized "gibberish" metadata required to restore Menote-specific formatting
+
+This is unnecessarily complicated.
+
+Menote supports things that standard Markdown cannot represent cleanly, especially:
+
+- arbitrary text colors
+- Menote-specific formatting
+- editor state
+- future formatting features
+
+Therefore we no longer need the file to be human-readable Markdown.
+
+Instead, `.menote` will be a dedicated Menote document format capable of representing the COMPLETE document.
+
+==================================================
+CORE ARCHITECTURE
+==================================================
+
+The architecture must be:
+
+                    ┌─────────────────┐
+                    │   Menote Editor │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Menote Document │
+                    │     Model       │
+                    └────────┬────────┘
+                             │
+                      serialize/load
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Menote.menote  │
+                    │                 │
+                    │ SOURCE OF TRUTH │
+                    └─────────────────┘
+
+The editor's in-memory state is the working representation.
+
+The `.menote` file is the persistent representation.
+
+DO NOT use a temporary file as the primary source.
+
+DO NOT keep a second hidden database containing the real document.
+
+DO NOT make UserDefaults the primary document storage.
+
+==================================================
+DOCUMENT FORMAT
+==================================================
+
+Create a proper, versioned Menote document format.
+
+The exact serialization format is an implementation decision, but it must be:
+
+- structured
+- deterministic
+- versioned
+- safe
+- recoverable
+- extensible
+- capable of representing all existing Menote document features
+
+Include a format version.
+
+Example conceptually:
+
+formatVersion: 1
+
+The exact file encoding does NOT have to look exactly like this.
+
+The important thing is that Menote can reliably:
+
+serialize:
+Document Model → .menote
+
+and deserialize:
+
+.menote → Document Model
+
+==================================================
+WHAT MUST BE STORED
+==================================================
+
+The `.menote` document must preserve EVERYTHING required to reconstruct the document exactly.
+
+At minimum:
+
+- text
+- paragraphs
+- line breaks
+- blank lines
+- bold
+- italic
+- text colors
+- Menote font size/settings that are part of the document
+- numbered lists
+- lettered lists
+- bullet lists
+- list structure
+- indentation if currently supported
+- any other formatting currently supported by Menote
+
+Do NOT flatten rich text into plain text.
+
+Do NOT depend on Markdown syntax.
+
+Do NOT discard text colors.
+
+Do NOT discard formatting that Markdown cannot represent.
+
+==================================================
+EDITOR MUST REMAIN UNCHANGED
+==================================================
+
+The existing editor/document model is already working.
+
+DO NOT replace the existing attributed/rich-text editor with a String-based editor.
+
+DO NOT make the editor operate directly on the serialized file format.
+
+The editor should continue using its existing internal representation.
+
+The serialization layer should translate between:
+
+Existing Menote Document Model
+                ↕
+       Menote Serialization
+                ↕
+          .menote file
+
+==================================================
+SAVE BEHAVIOR
+==================================================
+
+When the document changes:
+
+Editor changes
+      ↓
+Document model updates
+      ↓
+Debounced save
+      ↓
+Serialize document
+      ↓
+Write to .menote
+
+Do NOT synchronously rewrite the file on every keystroke if that causes performance issues.
+
+Use a sensible debounce/coalescing strategy.
+
+However, DO NOT wait until the application quits to save.
+
+While Menote is running, the physical `.menote` file should contain the latest successfully saved document state.
+
+Example:
+
+User types:
+
+Hello Menote
+
+After the save debounce completes:
+
+Menote.menote
+
+must physically contain the serialized representation of:
+
+Hello Menote
+
+If I inspect the file while Menote is still running, the latest saved state must exist.
+
+==================================================
+SAFE FILE WRITING
+==================================================
+
+Do not risk corrupting the user's document.
+
+Use safe/atomic writing where appropriate.
+
+A safe approach may be:
+
+1. Serialize document.
+2. Write to temporary file.
+3. Verify write succeeded.
+4. Atomically replace the target `.menote`.
+
+Handle:
+
+- write failures
+- permission failures
+- missing directories
+- inaccessible files
+- disk errors
+
+Never silently replace a valid document with an empty document because a save/read operation failed.
+
+==================================================
+LOAD BEHAVIOR
+==================================================
+
+When Menote opens an existing `.menote` file:
+
+1. Resolve/access the file.
+2. Read the serialized data.
+3. Validate the format version.
+4. Deserialize it.
+5. Reconstruct the existing Menote document model.
+6. Populate the existing editor.
+7. Show the document normally.
+
+Do NOT create an empty temporary document and merely associate the `.menote` path with it.
+
+The contents MUST actually be loaded from the file.
+
+==================================================
+FIRST LAUNCH
+==================================================
+
+On the first launch after installation, if Menote has no configured document:
+
+Do NOT create a custom empty "Menote Setup" window.
+
+Use a native macOS folder-selection flow.
+
+The user should choose a FOLDER.
+
+They should NOT manually create the file.
+
+Flow:
+
+Menote launches
+      ↓
+No existing document configured
+      ↓
+Native macOS folder picker
+      ↓
+User chooses folder
+      ↓
+Menote automatically creates:
+
+<selected folder>/Menote.menote
+
+      ↓
+Store persistent reference
+      ↓
+Open normal Menote editor
+
+==================================================
+NATIVE FOLDER PICKER
+==================================================
+
+Use the appropriate native macOS NSOpenPanel configuration.
+
+Requirements:
+
+canChooseDirectories = true
+canChooseFiles = false
+allowsMultipleSelection = false
+
+The user selects a folder.
+
+Do NOT create a fake custom file browser.
+
+Do NOT create a text field where the user types a filesystem path.
+
+Do NOT create the previous empty "Menote Setup" window.
+
+The native macOS folder picker should be responsible for folder selection.
+
+==================================================
+IF MENOTE.MENOTE ALREADY EXISTS
+==================================================
+
+If the selected folder already contains:
+
+Menote.menote
+
+DO NOT overwrite it.
+
+Load the existing document.
+
+The user's data must always be protected.
+
+If the file exists, it is the user's document.
+
+==================================================
+FIRST-LAUNCH STATE
+==================================================
+
+Remember which `.menote` file is currently connected.
+
+Use the appropriate macOS persistent file reference/security-scoped bookmark mechanism if required by the app's sandbox configuration.
+
+On subsequent launches:
+
+Menote
+  ↓
+Resolve stored file reference
+  ↓
+Open existing Menote.menote
+  ↓
+Load document
+  ↓
+Show editor
+
+Do NOT ask the user to select the folder again every launch.
+
+==================================================
+OPEN EXISTING DOCUMENT
+==================================================
+
+Menote should support opening an existing `.menote` file.
+
+The eventual behavior should be:
+
+Open
+  ↓
+Native file picker
+  ↓
+User chooses:
+
+SomeDocument.menote
+
+  ↓
+Menote loads it.
+
+The file picker should filter for `.menote` files where appropriate.
+
+Do NOT allow arbitrary file types to be treated as Menote documents unless explicitly supported.
+
+==================================================
+REINSTALLATION
+==================================================
+
+This is a major requirement.
+
+The user's `.menote` file must exist independently of the application installation.
+
+Example:
+
+User has:
+
+~/Documents/Menote.menote
+
+Then:
+
+1. User deletes Menote.app.
+2. User installs a newer Menote version.
+3. User launches Menote.
+4. Menote can reconnect to the existing `.menote`.
+5. All document content and formatting are restored.
+
+The app installation must NEVER contain the only copy of the user's document.
+
+==================================================
+NEW DOCUMENT
+==================================================
+
+If the existing Menote UI already has a New document concept, make sure new documents use:
+
+.menote
+
+instead of:
+
+.md
+
+The document should be created using the new Menote serialization format.
+
+==================================================
+UNDO / REDO
+==================================================
+
+DO NOT connect serialization directly to undo/redo.
+
+Undo/redo must continue operating on the existing editor/document model.
+
+The `.menote` file is persistence.
+
+Undo history is editor state.
+
+Do NOT serialize the entire 500-step undo history into the `.menote` file unless the existing architecture explicitly requires it.
+
+The saved document represents the current document state.
+
+==================================================
+EXTERNAL FILE CHANGES
+==================================================
+
+Do NOT implement complex external-file synchronization yet.
+
+For this phase, the supported flow is:
+
+Menote opens document
+      ↓
+Menote edits document
+      ↓
+Menote saves document
+
+If the user manually changes the `.menote` file externally while Menote is running, behavior does not need to be fully synchronized yet.
+
+Do NOT introduce file watchers or conflict-resolution systems unless already required by the existing architecture.
+
+==================================================
+MIGRATION FROM CURRENT .MD FORMAT
+==================================================
+
+The current development version may already have `.md` files.
+
+Determine whether these are:
+
+A. test/development-only files
+
+or
+
+B. files that users may already have.
+
+If they are only development files, it is acceptable to replace the implementation cleanly.
+
+If real user `.md` documents already exist, DO NOT silently delete or overwrite them.
+
+In that case, implement a migration strategy:
+
+Old `.md`
+   ↓
+read old Menote representation
+   ↓
+convert
+   ↓
+Menote.menote
+
+Do NOT implement migration blindly.
+
+First inspect the existing format and determine what information must be migrated.
+
+==================================================
+REMOVE OLD .MD STORAGE LOGIC
+==================================================
+
+Once the new `.menote` architecture is implemented:
+
+Remove the old assumption that the primary document is:
+
+Menote.md
+
+Remove the old:
+
+readable Markdown
++
+metadata/gibberish
+
+storage architecture.
+
+Do not leave two competing persistence systems.
+
+There should be ONE authoritative document format:
+
+.menote
+
+==================================================
+DO NOT BREAK EXISTING V1 FEATURES
+==================================================
+
+This is extremely important.
+
+The following features have already required significant debugging.
+
+DO NOT modify their behavior while implementing storage:
+
+EDITOR:
+- normal typing
+- Spacebar
+- Return
+- Shift+Return
+
+FORMATTING:
+- Bold
+- Italic
+- Text color
+
+PASTE:
+- plain-text paste behavior
+- formatted-source paste
+- pasted font size must NOT override Menote's font size
+- paste must NOT crash
+
+LISTS:
+- automatic 1. numbering
+- automatic a. numbering
+- bullet lists
+- /list
+- /number
+- list continuation
+
+DELETION:
+- normal Delete
+- Option+Delete
+- Option+Backspace
+- blank-line deletion behavior
+
+UNDO:
+- 500-step undo history
+- multiple undo operations
+- multiple redo operations
+- spaces restored correctly
+- text restored correctly
+- formatting restored correctly
+
+UI:
+- line numbers
+- word count
+- menu bar
+- existing appearance
+- existing keyboard shortcuts
+
+DO NOT rewrite these systems.
+
+The serialization layer should be isolated from them.
+
+==================================================
+CRITICAL: FORMATTING SELECTION
+==================================================
+
+There is also an existing requirement:
+
+When text is selected and formatting is applied:
+
+Bold
+Italic
+Color
+
+the selection must remain selected.
+
+Do not break this while modifying persistence.
+
+==================================================
+CRITICAL: OPTION+DELETE
+==================================================
+
+Do not modify the existing Option+Delete implementation.
+
+It must preserve normal macOS behavior while respecting blank-line boundaries.
+
+The storage change must have ZERO impact on keyboard event handling.
+
+==================================================
+FILE FORMAT EXTENSION
+==================================================
+
+The final document extension is:
+
+.menote
+
+NOT:
+
+.md
+.txt
+.json
+.dat
+
+The initial automatically created file should be:
+
+Menote.menote
+
+Use the exact capitalization currently used for the product name:
+
+Menote
+
+==================================================
+TESTING
+==================================================
+
+Do not report success merely because the project compiles.
+
+Run the actual application and test the physical document file.
+
+TEST 1 — NEW DOCUMENT
+
+1. Start with no existing Menote document.
+2. Launch Menote.
+3. Choose Documents.
+4. Verify:
+
+Documents/Menote.menote
+
+is created.
+5. Open Menote normally.
+6. Type text.
+7. Wait for save.
+8. Inspect the physical `.menote` file.
+9. Verify it contains the serialized document state.
+
+TEST 2 — RESTART
+
+1. Quit Menote.
+2. Reopen Menote.
+3. Verify the document loads exactly.
+
+TEST 3 — FORMATTING
+
+Create a document containing:
+
+- normal text
+- bold
+- italic
+- colored text
+- blank lines
+- numbered lists
+- lettered lists
+- bullet lists
+
+Quit.
+
+Reopen.
+
+Everything must be restored.
+
+TEST 4 — REINSTALL
+
+1. Close Menote.
+2. Delete Menote.app.
+3. Install the new build.
+4. Launch Menote.
+5. Reconnect to the existing:
+
+Menote.menote
+
+6. Verify everything is restored.
+
+TEST 5 — EXISTING DOCUMENT
+
+Create:
+
+Test.menote
+
+Open it through Menote.
+
+Verify it loads correctly.
+
+==================================================
+DATA SAFETY
+==================================================
+
+The most important invariant is:
+
+THE USER'S DOCUMENT MUST NEVER DISAPPEAR BECAUSE MENOTE WAS DELETED OR REINSTALLED.
+
+The `.menote` file exists independently from the application.
+
+Deleting the application must NOT delete the document.
+
+==================================================
+IMPLEMENTATION ORDER
+==================================================
+
+Do this in phases.
+
+PHASE 1:
+Inspect the existing V2 storage implementation.
+
+Identify:
+
+- current document model
+- current temporary storage
+- current `.md` serialization
+- current `.md` loading
+- current `.md` saving
+- current first-launch flow
+- current file bookmark/reference system
+
+DO NOT MODIFY CODE YET.
+
+Report the findings.
+
+PHASE 2:
+Implement the new `.menote` serialization layer.
+
+Do not modify editor behavior.
+
+PHASE 3:
+Implement `.menote` save/load.
+
+Verify physical persistence.
+
+PHASE 4:
+Replace `.md` first-launch creation with `.menote`.
+
+PHASE 5:
+Implement opening existing `.menote` documents.
+
+PHASE 6:
+Handle migration from the existing `.md` format if necessary.
+
+PHASE 7:
+Run the complete regression test suite.
+
+==================================================
+FINAL REPORT
+==================================================
+
+When finished, report:
+
+1. What the old `.md` storage architecture was doing.
+2. What the new `.menote` format contains.
+3. Where serialization/deserialization lives.
+4. Where saving/loading lives.
+5. How first-launch file creation works.
+6. How persistent file access/bookmarks work.
+7. How reinstall/reconnect works.
+8. Whether old `.md` migration is required.
+9. Which tests were performed.
+10. Confirm that existing editor behavior was not modified.
+
+IMPORTANT:
+
+Do not claim the implementation is complete just because the build succeeds.
+
+The physical `.menote` file must be tested.
+
+The complete round trip must work:
+
+Editor
+→ save
+→ Menote.menote
+→ quit
+→ reopen
+→ Menote.menote
+→ load
+→ Editor
+
+And all existing formatting must survive that round trip.
+
+STOP after this implementation and testing.
