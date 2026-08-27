@@ -44,6 +44,10 @@ public final class NoteStore {
         storageManager.checkAvailability() == .available
     }
 
+    public var activeFileURL: URL? {
+        try? fileLocationManager?.getSavedFileLocation()
+    }
+
     // MARK: - Loading
 
     public func loadFromDisk() {
@@ -97,6 +101,74 @@ public final class NoteStore {
         pendingAutosave = nil
         flushSync()
         loadFromDisk()
+    }
+
+    // MARK: - Open File
+
+    public enum OpenFileError: LocalizedError {
+        case invalidExtension
+        case fileLocationUnavailable
+        case loadFailed(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .invalidExtension:
+                return "Only .menote files can be opened."
+            case .fileLocationUnavailable:
+                return "Could not save file location."
+            case .loadFailed(let reason):
+                return "Failed to load file: \(reason)"
+            }
+        }
+    }
+
+    @discardableResult
+    public func openFile(_ url: URL) throws -> Note {
+        guard url.pathExtension.lowercased() == "menote" else {
+            throw OpenFileError.invalidExtension
+        }
+
+        guard let fileLocationManager else {
+            throw OpenFileError.fileLocationUnavailable
+        }
+
+        guard let markdownPersistence else {
+            throw OpenFileError.loadFailed("Persistence layer unavailable.")
+        }
+
+        Logger.shared.log("[DEBUG] NoteStore.openFile: saving location for \(url.path)")
+        do {
+            try fileLocationManager.saveFileLocation(url)
+        } catch {
+            throw OpenFileError.fileLocationUnavailable
+        }
+
+        Logger.shared.log("[DEBUG] NoteStore.openFile: saved active file URL = \(activeFileURL?.path ?? "nil")")
+
+        do {
+            let note = try markdownPersistence.loadNote(from: url)
+            notes = note.map { [$0] } ?? []
+            currentNoteID = note?.id
+            draftText = ""
+            loadHadError = false
+            saveStatus = .idle
+        } catch {
+            loadHadError = true
+            saveStatus = .failed("Could not read file: \(error.localizedDescription)")
+            notesChanged?()
+            currentNoteChanged?()
+            statusChanged?()
+            throw OpenFileError.loadFailed(error.localizedDescription)
+        }
+
+        notesChanged?()
+        currentNoteChanged?()
+        statusChanged?()
+
+        guard let openedNote = currentNote else {
+            throw OpenFileError.loadFailed("File was empty.")
+        }
+        return openedNote
     }
 
     // MARK: - Ordering / queries
@@ -236,6 +308,26 @@ public final class NoteStore {
         }
         scheduleSave()
         notesChanged?()
+    }
+
+    // MARK: - Save a Copy
+
+    public func saveCopyTo(_ url: URL) throws {
+        guard let markdownPersistence else {
+            throw CopyError.persistenceUnavailable
+        }
+        try markdownPersistence.saveNote(currentNote, draftText: draftText, to: url)
+    }
+
+    public enum CopyError: LocalizedError {
+        case persistenceUnavailable
+
+        public var errorDescription: String? {
+            switch self {
+            case .persistenceUnavailable:
+                return "Menote persistence layer is not available."
+            }
+        }
     }
 
     // MARK: - Autosave

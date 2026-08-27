@@ -16,7 +16,15 @@ final class AppCoordinator: MenuBarManagerDelegate {
 
     private var hasWarnedStorage = false
 
+    private var menoteURL: URL {
+        let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return supportDir.appendingPathComponent("Menote").appendingPathComponent("Menote.menote")
+    }
+
+    deinit { Logger.shared.log("AppCoordinator deinit") }
+
     init() {
+        Logger.shared.log("AppCoordinator init")
         storageManager = StorageManager(settings: settings)
         let layout = storageManager.layout
         persistence = JSONPersistence(layout: layout)
@@ -38,6 +46,30 @@ final class AppCoordinator: MenuBarManagerDelegate {
         applyAppearance(settings.appearance)
     }
 
+    func start() {
+        Logger.shared.log("AppCoordinator.start()")
+        hotkeyManager.onKeyDown = { [weak self] in
+            self?.menuBarManager.togglePopover()
+        }
+
+        hotkeyManager.register(keyCode: 18, modifierMask: UInt32(cmdKey | shiftKey))
+
+        applyAppearance(settings.appearance)
+
+        AboutWindowController.shared.configure(store: noteStore)
+
+        Logger.shared.log("[DEBUG] Resolved default file URL: \(menoteURL.path)")
+
+        guard connectedMarkdownFileIsAvailable() else {
+            presentDefaultMenote()
+            return
+        }
+
+        ensureActiveFileLocationIsSaved()
+        Logger.shared.log("[DEBUG] Active file URL after startup: \(noteStore.activeFileURL?.path ?? "nil")")
+        startNormalOperation()
+    }
+
     @objc private func availabilityChanged(_ notification: Notification) {
         let avail = storageManager.checkAvailability()
         switch avail {
@@ -56,23 +88,9 @@ final class AppCoordinator: MenuBarManagerDelegate {
         _ = storageManager.checkAvailability()
     }
 
-    func start() {
-        hotkeyManager.onKeyDown = { [weak self] in
-            self?.menuBarManager.togglePopover()
-        }
-
-        hotkeyManager.register(keyCode: 18, modifierMask: UInt32(cmdKey | shiftKey))
-
-        applyAppearance(settings.appearance)
-
-        guard connectedMarkdownFileIsAvailable() else {
-            presentMarkdownFolderPicker()
-            return
-        }
-        startNormalOperation()
-    }
 
     private func startNormalOperation() {
+        Logger.shared.log("startNormalOperation BEGIN")
         NSApp.setActivationPolicy(.accessory)
         let vc = makeScratchpadVC()
         scratchpadVC = vc
@@ -88,61 +106,63 @@ final class AppCoordinator: MenuBarManagerDelegate {
         if noteStore.currentNoteID == nil, let firstNote = noteStore.notes.first {
             noteStore.selectNote(firstNote.id)
         }
+        Logger.shared.log("startNormalOperation END")
     }
 
     private func connectedMarkdownFileIsAvailable() -> Bool {
-        guard fileLocationManager.hasCompletedFirstLaunch else { return false }
-        return fileLocationManager.verifySavedFileAccessible()
+        let menoteURL = menoteURL
+        guard FileManager.default.fileExists(atPath: menoteURL.path) else { return false }
+        return FileManager.default.isReadableFile(atPath: menoteURL.path)
     }
 
-    private func presentMarkdownFolderPicker() {
-        // An accessory app has no normal activation UI. Temporarily become a
-        // regular app so the system folder picker can be presented directly.
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-
-        let panel = NSOpenPanel()
-        panel.title = "Choose a Folder for Menote"
-        panel.message = "Menote will create or use Menote.md in this folder."
-        panel.prompt = "Choose"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.begin { [weak self] response in
-            guard let self else { return }
-            defer { NSApp.setActivationPolicy(.accessory) }
-
-            guard response == .OK, let folderURL = panel.url else {
-                return
-            }
-
-            let fileURL = folderURL.appendingPathComponent("Menote.md")
-            do {
-                // An existing document is always retained intact.
-                if !FileManager.default.fileExists(atPath: fileURL.path) {
-                    try self.markdownPersistence.createFile(at: fileURL)
-                }
-                _ = try self.markdownPersistence.loadContent(from: fileURL)
-                try self.fileLocationManager.saveFileLocation(fileURL)
-                self.fileLocationManager.markFirstLaunchCompleted()
-                self.startNormalOperation()
-            } catch {
-                self.presentMarkdownFolderPickerError(error)
-            }
-        }
-    }
-
-    private func presentMarkdownFolderPickerError(_ error: Error) {
-        NSApp.setActivationPolicy(.regular)
-        let alert = NSAlert(error: error)
-        alert.addButton(withTitle: "Choose Another Folder")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn {
-            presentMarkdownFolderPicker()
+    private func ensureActiveFileLocationIsSaved() {
+        let defaultURL = menoteURL
+        let existingURL = try? fileLocationManager.getSavedFileLocation()
+        if existingURL == nil {
+            try? fileLocationManager.saveFileLocation(defaultURL)
+            Logger.shared.log("[DEBUG] Saved default file URL to active state: \(defaultURL.path)")
         } else {
-            NSApp.setActivationPolicy(.accessory)
+            Logger.shared.log("[DEBUG] Active file URL already set: \(existingURL?.path ?? "nil")")
         }
+    }
+
+    private func presentDefaultMenote() {
+        Logger.shared.log("presentDefaultMenote BEGIN")
+
+        let menoteURL = menoteURL
+        let menoteDir = menoteURL.deletingLastPathComponent()
+        let mdURL = menoteURL.deletingLastPathComponent().appendingPathComponent("Menote.md")
+
+        if !FileManager.default.fileExists(atPath: menoteDir.path) {
+            try? FileManager.default.createDirectory(at: menoteDir, withIntermediateDirectories: true, attributes: nil)
+        }
+
+        // Migration: if Menote.md exists but Menote.menote doesn't, migrate content
+        let needsMigration = FileManager.default.fileExists(atPath: mdURL.path) &&
+            !FileManager.default.fileExists(atPath: menoteURL.path)
+
+        do {
+            if needsMigration {
+                // Copy content from Menote.md to Menote.menote
+                let mdContent = try String(contentsOf: mdURL, encoding: .utf8)
+                try "\(mdContent)\n".write(to: menoteURL, atomically: true, encoding: .utf8)
+                // Note: we keep the original Menote.md per fix.txt instructions
+            }
+
+            if !FileManager.default.fileExists(atPath: menoteURL.path) {
+                try markdownPersistence.createFile(at: menoteURL)
+            }
+            _ = try markdownPersistence.loadContent(from: menoteURL)
+            try fileLocationManager.saveFileLocation(menoteURL)
+            fileLocationManager.markFirstLaunchCompleted()
+            Logger.shared.log("[DEBUG] Saved default file URL in presentDefaultMenote: \(menoteURL.path)")
+            startNormalOperation()
+        } catch {
+            // Handle error gracefully - don't crash
+            Logger.shared.log("Error presenting default Menote: \(error.localizedDescription)")
+        }
+
+        Logger.shared.log("presentDefaultMenote END")
     }
 
     // MARK: - App lifecycle

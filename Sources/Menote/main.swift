@@ -41,8 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenu = NSMenu()
         fileMenuItem.submenu = fileMenu
 
-        fileMenu.addItem(withTitle: "Open TXT…", action: #selector(ScratchpadViewController.openTXT), keyEquivalent: "o")
-        fileMenu.addItem(withTitle: "Export as TXT…", action: #selector(ScratchpadViewController.exportAsTXT), keyEquivalent: "e")
+        fileMenu.addItem(withTitle: "Open…", action: #selector(ScratchpadViewController.openMenote), keyEquivalent: "o")
+        fileMenu.addItem(withTitle: "Save a Copy…", action: #selector(ScratchpadViewController.saveCopy), keyEquivalent: "e")
 
         // Edit menu - critical for standard text editing shortcuts
         let editMenuItem = NSMenuItem()

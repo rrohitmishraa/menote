@@ -14,6 +14,8 @@ final class MenuBarManager {
     private var popoverContent: ScratchpadViewController?
     private var isPopoverVisible = false
 
+    deinit { Logger.shared.log("MenuBarManager deinit") }
+
     func setup(with contentController: ScratchpadViewController) {
         self.popoverContent = contentController
 

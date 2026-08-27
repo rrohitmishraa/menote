@@ -3,6 +3,8 @@ import MenoteCore
 
 final class AboutWindowController: NSWindowController {
     private var launchCheckbox: NSButton?
+    private var fileLocationLabel: NSTextField!
+    private weak var noteStore: NoteStore?
 
     static let shared = AboutWindowController()
 
@@ -12,6 +14,10 @@ final class AboutWindowController: NSWindowController {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    func configure(store: NoteStore) {
+        self.noteStore = store
+    }
 
     private func buildWindow() {
         let w = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
@@ -50,6 +56,14 @@ final class AboutWindowController: NSWindowController {
 
         // How to use
         stack.addArrangedSubview(buildHowToUseSection())
+        stack.addArrangedSubview(makeSpacer(16))
+
+        // Separator
+        stack.addArrangedSubview(makeSeparator())
+        stack.addArrangedSubview(makeSpacer(16))
+
+        // File Location
+        stack.addArrangedSubview(buildFileLocationSection())
         stack.addArrangedSubview(makeSpacer(16))
 
         // Separator
@@ -161,8 +175,9 @@ final class AboutWindowController: NSWindowController {
         name.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(name)
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
-        let versionLabel = NSTextField(labelWithString: "Version \(version)")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.2.1"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        let versionLabel = NSTextField(labelWithString: "Version \(version) (\(build))")
         versionLabel.font = .systemFont(ofSize: 12)
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -259,7 +274,7 @@ final class AboutWindowController: NSWindowController {
         right.addArrangedSubview(makeSpacer(10))
 
         right.addArrangedSubview(sectionLabel("Files"))
-        for (title, desc) in [("Open TXT","Import plain text (⌘O)"),("Export TXT","Export as plain text (⌘E). Formatting not preserved.")] {
+        for (title, desc) in [("Open","Open a .menote file (\u{2318}O)"),("Save","Auto-saves to active file"),("Save a Copy","Save a copy anywhere (\u{2318}E)")] {
             right.addArrangedSubview(bulletRow(title, desc))
         }
         right.translatesAutoresizingMaskIntoConstraints = false
@@ -321,7 +336,91 @@ final class AboutWindowController: NSWindowController {
         NSApp.terminate(nil)
     }
 
-    // MARK: - Helpers
+    // MARK: - File Location
+
+    private func buildFileLocationSection() -> NSView {
+        let v = makeFullWidthStack()
+
+        v.addArrangedSubview(sectionLabel("File Location"))
+
+        fileLocationLabel = NSTextField(wrappingLabelWithString: "Not available")
+        fileLocationLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        fileLocationLabel.textColor = .secondaryLabelColor
+        fileLocationLabel.preferredMaxLayoutWidth = 400
+        fileLocationLabel.lineBreakMode = .byTruncatingMiddle
+        let labelWrapper = makeFullWidthStack()
+        labelWrapper.addArrangedSubview(fileLocationLabel)
+        v.addArrangedSubview(labelWrapper)
+
+        let buttonRow = NSStackView()
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 10
+
+        let copyPathBtn = NSButton(title: "Copy Path", target: self, action: #selector(copyPath))
+        copyPathBtn.bezelStyle = .rounded
+        copyPathBtn.controlSize = .small
+        copyPathBtn.font = .systemFont(ofSize: 12)
+
+        let openFolderBtn = NSButton(title: "Reveal in Finder", target: self, action: #selector(openFolder))
+        openFolderBtn.bezelStyle = .rounded
+        openFolderBtn.controlSize = .small
+        openFolderBtn.font = .systemFont(ofSize: 12)
+
+        buttonRow.addArrangedSubview(copyPathBtn)
+        buttonRow.addArrangedSubview(openFolderBtn)
+
+        let btnWrapper = makeFullWidthStack()
+        btnWrapper.addArrangedSubview(buttonRow)
+        v.addArrangedSubview(btnWrapper)
+
+        return v
+    }
+
+    private func refreshFileLocation() {
+        guard let noteStore else {
+            Logger.shared.log("[DEBUG] About: noteStore is nil")
+            fileLocationLabel.stringValue = "Not available"
+            return
+        }
+        if let url = noteStore.activeFileURL {
+            Logger.shared.log("[DEBUG] About: Active file URL = \(url.path)")
+            fileLocationLabel.stringValue = url.path
+        } else {
+            Logger.shared.log("[DEBUG] About: activeFileURL is nil")
+            fileLocationLabel.stringValue = "Not available"
+        }
+    }
+
+    @objc private func copyPath() {
+        guard let noteStore, let url = noteStore.activeFileURL else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.path, forType: .string)
+
+        let feedback = NSTextField(labelWithString: "Copied")
+        feedback.font = .systemFont(ofSize: 11, weight: .medium)
+        feedback.textColor = .controlAccentColor
+        feedback.translatesAutoresizingMaskIntoConstraints = false
+
+        if let contentView = window?.contentView {
+            contentView.addSubview(feedback)
+            NSLayoutConstraint.activate([
+                feedback.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+                feedback.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            ])
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 1.5
+                ctx.allowsImplicitAnimation = true
+                feedback.animator().alphaValue = 0
+            } completionHandler: {
+                feedback.removeFromSuperview()
+            }
+        }
+    }
+
+    @objc private func openFolder() {
+        guard let noteStore, let url = noteStore.activeFileURL else { return }
+        NSWorkspace.shared.open(url.deletingLastPathComponent())
+    }
 
     private func sectionLabel(_ text: String) -> NSView {
         let label = NSTextField(labelWithString: text)
@@ -418,6 +517,7 @@ final class AboutWindowController: NSWindowController {
     // MARK: - Presentation
 
     func showAbout() {
+        refreshFileLocation()
         if let w = window, w.isVisible {
             w.makeKeyAndOrderFront(nil)
         } else {

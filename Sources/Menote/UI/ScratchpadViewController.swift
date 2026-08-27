@@ -1,5 +1,6 @@
 import AppKit
 import MenoteCore
+import UniformTypeIdentifiers
 
 final class LineNumberView: NSView {
     weak var textView: EditorTextView?
@@ -586,12 +587,12 @@ final class ScratchpadViewController: NSViewController {
         view.addSubview(headerView)
 
         let openButton = makeToolbarButton(
-            image: NSImage(systemSymbolName: "doc", accessibilityDescription: "Open TXT")!,
-            target: self, action: #selector(openTXT), tooltip: "Open TXT (⌘O)")
+            image: NSImage(systemSymbolName: "folder", accessibilityDescription: "Open")!,
+            target: self, action: #selector(openMenote), tooltip: "Open .menote (⌘O)")
 
         let exportButton = makeToolbarButton(
-            image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export TXT")!,
-            target: self, action: #selector(exportAsTXT), tooltip: "Export as TXT (⌘E)")
+            image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Save a Copy")!,
+            target: self, action: #selector(saveCopy), tooltip: "Save a Copy (⌘E)")
 
         let boldButton = makeToolbarButton(
             title: "B", target: self, action: #selector(toggleBold), tooltip: "Bold (⌘B)")
@@ -1109,75 +1110,92 @@ final class ScratchpadViewController: NSViewController {
         return image
     }
 
-    // MARK: - TXT Export / Import
+    // MARK: - Save a Copy
 
-    @objc func exportAsTXT() {
+    @objc func saveCopy() {
         let text = textView.string
         guard !text.isEmpty else { return }
 
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "note.txt"
+        panel.allowedContentTypes = [UTType(filenameExtension: "menote", conformingTo: .data) ?? .data]
+        panel.nameFieldStringValue = "note.menote"
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
+        panel.message = "Save a copy of your note as a .menote file."
 
         panel.begin { [weak self] result in
-            guard result == .OK, let url = panel.url else { return }
+            guard result == .OK, var url = panel.url else { return }
+
+            let ext = url.pathExtension.lowercased()
+            if ext != "menote" {
+                url = url.deletingPathExtension().appendingPathExtension("menote")
+            }
+
             do {
-                try text.write(to: url, atomically: true, encoding: .utf8)
+                try self?.store.saveCopyTo(url)
             } catch {
-                self?.showImportError("Could not export: \(error.localizedDescription)")
+                let alert = NSAlert()
+                alert.messageText = "Save Failed"
+                alert.informativeText = "Could not save copy: \(error.localizedDescription)"
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
             }
         }
     }
 
-    @objc func openTXT() {
+    @objc func openMenote() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.plainText]
+        panel.allowedContentTypes = [UTType(filenameExtension: "menote", conformingTo: .data) ?? .data]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.isExtensionHidden = false
-        panel.message = "Select a text file to open. The current note will be replaced."
+        panel.message = "Select a .menote file to open."
 
         panel.begin { [weak self] result in
             guard result == .OK, let url = panel.url else { return }
-            self?.loadTXTFromURL(url)
+            self?.openFile(url)
         }
     }
 
-    private func loadTXTFromURL(_ url: URL) {
+    private func openFile(_ url: URL) {
+        guard url.pathExtension.lowercased() == "menote" else {
+            let alert = NSAlert()
+            alert.messageText = "Unsupported File"
+            alert.informativeText = "Only .menote files can be opened."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
         guard textView.string.isEmpty || store.currentNoteID == nil else {
             let alert = NSAlert()
-            alert.messageText = "Open this text file?"
+            alert.messageText = "Open this file?"
             alert.informativeText = "Your current note will be replaced."
             alert.addButton(withTitle: "Open")
             alert.addButton(withTitle: "Cancel")
             alert.alertStyle = .warning
 
             if alert.runModal() == .alertFirstButtonReturn {
-                performTXTImport(from: url)
+                loadMenoteFile(from: url)
             }
             return
         }
-        performTXTImport(from: url)
+        loadMenoteFile(from: url)
     }
 
-    private func performTXTImport(from url: URL) {
+    private func loadMenoteFile(from url: URL) {
         do {
-            let text = try String(contentsOf: url, encoding: .utf8)
-            textView.undoManager?.beginUndoGrouping()
-            textView.selectAll(nil)
-            textView.insertText(text, replacementRange: textView.selectedRange())
-            textView.undoManager?.endUndoGrouping()
-            textView.scrollToBeginningOfDocument(nil)
-            resizeEditorToContent()
-            lineNumberView?.needsDisplay = true
-            refreshMatches()
-            updateWordCount()
-            textView.checkTextInDocument(nil)
+            try store.openFile(url)
         } catch {
-            showImportError("Could not read file: \(error.localizedDescription)")
+            let alert = NSAlert()
+            alert.messageText = "Could Not Open File"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
         }
     }
 

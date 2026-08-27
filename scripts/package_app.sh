@@ -6,6 +6,10 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG="${1:-release}"
 APP="$ROOT/build/Menote.app"
 
+# Accept VERSION and BUILD_NUMBER from environment (set by build_pkg.sh)
+VERSION="${VERSION:-2.2.1}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
+
 cd "$ROOT"
 
 swift build -c "$CONFIG"
@@ -18,7 +22,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/menote" "$APP/Contents/MacOS/Menote"
 cp "$ROOT/logo.png" "$APP/Contents/Resources/logo.png"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -30,9 +34,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>
     <string>app.menote.menote</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>${BUILD_NUMBER}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${VERSION}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -49,6 +53,26 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>app.menote.menote</string>
+            <key>UTTypeDescription</key>
+            <string>Menote Document</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.plain-text</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>menote</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST

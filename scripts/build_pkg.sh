@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="1.0.0"
+VERSION="2.2.1"
 IDENTIFIER="app.menote.menote"
 APP_NAME="Menote"
 APP_PATH="$ROOT/build/$APP_NAME.app"
@@ -11,11 +11,40 @@ PKG_DIR="$ROOT/build/pkg"
 COMPONENT_PKG="$PKG_DIR/${APP_NAME}.pkg"
 DISTRIBUTION_XML="$PKG_DIR/Distribution"
 FINAL_PKG="$ROOT/build/${APP_NAME}-${VERSION}.pkg"
+BUILD_NUMBER_FILE="$ROOT/.menote-build-number"
 
 cd "$ROOT"
 
-# Build the app first
-"$SCRIPT_DIR/package_app.sh" release
+# Read current build number; determine next build number (do NOT persist yet)
+if [[ -f "$BUILD_NUMBER_FILE" ]]; then
+    BUILD_NUMBER=$(<"$BUILD_NUMBER_FILE")
+else
+    BUILD_NUMBER=0
+fi
+BUILD_NUMBER=$((BUILD_NUMBER + 1))
+
+echo "========================================"
+echo "Building Menote"
+echo "Version: $VERSION"
+echo "Build:   $BUILD_NUMBER"
+echo "========================================"
+
+# Build the app (passes VERSION and BUILD_NUMBER to package_app.sh)
+VERSION="$VERSION" BUILD_NUMBER="$BUILD_NUMBER" "$SCRIPT_DIR/package_app.sh" release
+
+# Verify .app Info.plist contains correct values
+PLIST="$APP_PATH/Contents/Info.plist"
+ACTUAL_VERSION=$(defaults read "$PLIST" CFBundleShortVersionString)
+ACTUAL_BUILD=$(defaults read "$PLIST" CFBundleVersion)
+
+if [[ "$ACTUAL_VERSION" != "$VERSION" ]]; then
+    echo "ERROR: CFBundleShortVersionString mismatch: expected $VERSION, got $ACTUAL_VERSION"
+    exit 1
+fi
+if [[ "$ACTUAL_BUILD" != "$BUILD_NUMBER" ]]; then
+    echo "ERROR: CFBundleVersion mismatch: expected $BUILD_NUMBER, got $ACTUAL_BUILD"
+    exit 1
+fi
 
 # Clean and create pkg directory
 rm -rf "$PKG_DIR"
@@ -70,4 +99,17 @@ productbuild \
     --package-path "$PKG_DIR" \
     "$FINAL_PKG"
 
-echo "Created installer: $FINAL_PKG"
+# Verify .pkg exists
+if [[ ! -f "$FINAL_PKG" ]]; then
+    echo "ERROR: Package not created at $FINAL_PKG"
+    exit 1
+fi
+
+# Persist the build number only after full success
+echo "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"
+
+echo "========================================"
+echo "Build successful"
+echo "Menote $VERSION ($BUILD_NUMBER)"
+echo "Package: $FINAL_PKG"
+echo "========================================"
