@@ -428,6 +428,11 @@ final class ScratchpadViewController: NSViewController {
     private let findHighlightColor = NSColor(srgbRed: 1.0, green: 0.95, blue: 0.45, alpha: 0.35)
     private let findCurrentColor = NSColor(srgbRed: 1.0, green: 0.84, blue: 0.0, alpha: 0.6)
 
+    // Context navigator
+    private let contextNavigator = ContextNavigatorViewController()
+    private lazy var contextPopover: NSPopover = contextNavigator.makePopover()
+    private var contextsButton: NSButton?
+
     init(store: NoteStore, actions: ScratchpadActions) {
         self.store = store
         self.actions = actions
@@ -453,6 +458,16 @@ final class ScratchpadViewController: NSViewController {
 
         store.currentNoteChanged = { [weak self] in self?.reloadFromStore() }
         store.statusChanged = { [weak self] in self?.updateFooter() }
+
+        contextNavigator.onScrollToContext = { [weak self] charIndex in
+            guard let self else { return }
+            if self.contextPopover.isShown {
+                self.contextPopover.close()
+            }
+            self.contextNavigator.scrollToContext(at: charIndex, in: self.textView)
+        }
+
+        _ = contextNavigator.view
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(storageAvailabilityChanged),
@@ -646,7 +661,12 @@ final class ScratchpadViewController: NSViewController {
             image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Find")!,
             target: self, action: #selector(toggleFind), tooltip: "Find (⌘F)")
 
-        let rightStack = NSStackView(views: [findControls, findIconButton])
+        let contextsButton = makeToolbarButton(
+            image: NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "Contexts")!,
+            target: self, action: #selector(toggleContextNavigator), tooltip: "Contexts")
+        self.contextsButton = contextsButton
+
+        let rightStack = NSStackView(views: [findControls, contextsButton, findIconButton])
         rightStack.orientation = .horizontal
         rightStack.spacing = 6
         rightStack.alignment = .centerY
@@ -761,6 +781,7 @@ final class ScratchpadViewController: NSViewController {
         lineNumberView?.needsDisplay = true
         updateWordCount()
         textView.checkTextInDocument(nil)
+        updateContexts()
     }
 
     private func normalizeAttributedString(_ attr: NSAttributedString) -> NSAttributedString {
@@ -866,6 +887,23 @@ final class ScratchpadViewController: NSViewController {
         if case .failed = store.saveStatus {
             store.scheduleSave()
         }
+    }
+
+    // MARK: - Context Navigator
+
+    @objc private func toggleContextNavigator() {
+        let popover = contextPopover
+        if popover.isShown {
+            popover.close()
+            return
+        }
+        guard let button = contextsButton else { return }
+        updateContexts()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+    }
+
+    func updateContexts() {
+        contextNavigator.updateContexts(from: textView.string)
     }
 
     func newNote() {
@@ -1227,6 +1265,7 @@ extension ScratchpadViewController: NSTextViewDelegate {
         store.updateCurrentText(textView.string, richText: rtf)
         lineNumberRedraw(nil)
         refreshMatches()
+        updateContexts()
 
         let ns = textView.string as NSString
         let cursor = textView.selectedRange().location

@@ -205,7 +205,7 @@ final class PreferencesWindowController: NSWindowController {
 
         stack.addArrangedSubview(sectionHeader("About"))
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.2.1"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.0"
         let versionLabel = NSTextField(labelWithString: "Menote \(version)")
         versionLabel.font = .systemFont(ofSize: 12, weight: .medium)
         stack.addArrangedSubview(versionLabel)

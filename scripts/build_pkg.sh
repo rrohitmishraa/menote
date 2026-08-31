@@ -3,11 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION="2.2.1"
+VERSION="3.0.0"
 IDENTIFIER="app.menote.menote"
 APP_NAME="Menote"
 APP_PATH="$ROOT/build/$APP_NAME.app"
-PKG_DIR="$ROOT/build/pkg"
+# pkgbuild/productbuild can crash with a BOM buffer overflow when run on
+# ExFAT/FAT volumes (e.g. external drives). Stage packaging in a local temp
+# directory and copy the result back to preserve the final location.
+TMP_ROOT="$(mktemp -d /tmp/menote-pkg.XXXXXX)"
+PKG_DIR="$TMP_ROOT/pkg"
 COMPONENT_PKG="$PKG_DIR/${APP_NAME}.pkg"
 DISTRIBUTION_XML="$PKG_DIR/Distribution"
 FINAL_PKG="$ROOT/build/${APP_NAME}-${VERSION}.pkg"
@@ -50,9 +54,13 @@ fi
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR"
 
+# Stage the app on a local filesystem to avoid BOM crashes on ExFAT/FAT volumes
+STAGED_APP="$TMP_ROOT/$APP_NAME.app"
+cp -R "$APP_PATH" "$STAGED_APP"
+
 # Create component package
 pkgbuild \
-    --component "$APP_PATH" \
+    --component "$STAGED_APP" \
     --install-location "/Applications" \
     --identifier "$IDENTIFIER" \
     --version "$VERSION" \
@@ -93,17 +101,22 @@ cat > "$DISTRIBUTION_XML" <<'DIST'
 </installer-gui-script>
 DIST
 
-# Create final product archive
+# Create final product archive (into the temp dir to avoid the BOM crash)
+TMP_FINAL_PKG="$PKG_DIR/${APP_NAME}-${VERSION}.pkg"
 productbuild \
     --distribution "$DISTRIBUTION_XML" \
     --package-path "$PKG_DIR" \
-    "$FINAL_PKG"
+    "$TMP_FINAL_PKG"
 
 # Verify .pkg exists
-if [[ ! -f "$FINAL_PKG" ]]; then
-    echo "ERROR: Package not created at $FINAL_PKG"
+if [[ ! -f "$TMP_FINAL_PKG" ]]; then
+    echo "ERROR: Package not created"
     exit 1
 fi
+
+# Copy the finished package back to the project build directory
+cp "$TMP_FINAL_PKG" "$FINAL_PKG"
+rm -rf "$TMP_ROOT"
 
 # Persist the build number only after full success
 echo "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"

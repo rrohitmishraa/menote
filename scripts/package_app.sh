@@ -7,7 +7,7 @@ CONFIG="${1:-release}"
 APP="$ROOT/build/Menote.app"
 
 # Accept VERSION and BUILD_NUMBER from environment (set by build_pkg.sh)
-VERSION="${VERSION:-2.2.1}"
+VERSION="${VERSION:-3.0.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 cd "$ROOT"

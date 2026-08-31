@@ -175,9 +175,19 @@ final class AboutWindowController: NSWindowController {
         name.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(name)
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.2.1"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        let versionLabel = NSTextField(labelWithString: "Version \(version) (\(build))")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let versionText: String
+        if let version, let build {
+            versionText = "Version \(version) (build \(build))"
+        } else if let version {
+            versionText = "Version \(version)"
+        } else if let build {
+            versionText = "Build \(build)"
+        } else {
+            versionText = ""
+        }
+        let versionLabel = NSTextField(labelWithString: versionText)
         versionLabel.font = .systemFont(ofSize: 12)
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -215,7 +225,7 @@ final class AboutWindowController: NSWindowController {
         let items = [
             "Click the Menote icon in your menu bar to open the editor.",
             "Type notes directly — they save automatically.",
-            "Use the toolbar buttons for Open, Export, Bold, Italic, and text colors.",
+            "Use the toolbar buttons for Open, Save a Copy, Bold, Italic, and text colors.",
         ]
 
         for text in items {
@@ -343,7 +353,7 @@ final class AboutWindowController: NSWindowController {
 
         v.addArrangedSubview(sectionLabel("File Location"))
 
-        fileLocationLabel = NSTextField(wrappingLabelWithString: "Not available")
+        fileLocationLabel = NSTextField(wrappingLabelWithString: "Not Available")
         fileLocationLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         fileLocationLabel.textColor = .secondaryLabelColor
         fileLocationLabel.preferredMaxLayoutWidth = 400
@@ -361,7 +371,7 @@ final class AboutWindowController: NSWindowController {
         copyPathBtn.controlSize = .small
         copyPathBtn.font = .systemFont(ofSize: 12)
 
-        let openFolderBtn = NSButton(title: "Reveal in Finder", target: self, action: #selector(openFolder))
+        let openFolderBtn = NSButton(title: "Open Folder", target: self, action: #selector(openFolder))
         openFolderBtn.bezelStyle = .rounded
         openFolderBtn.controlSize = .small
         openFolderBtn.font = .systemFont(ofSize: 12)
@@ -379,7 +389,7 @@ final class AboutWindowController: NSWindowController {
     private func refreshFileLocation() {
         guard let noteStore else {
             Logger.shared.log("[DEBUG] About: noteStore is nil")
-            fileLocationLabel.stringValue = "Not available"
+            fileLocationLabel.stringValue = "Not Available"
             return
         }
         if let url = noteStore.activeFileURL {
@@ -387,7 +397,7 @@ final class AboutWindowController: NSWindowController {
             fileLocationLabel.stringValue = url.path
         } else {
             Logger.shared.log("[DEBUG] About: activeFileURL is nil")
-            fileLocationLabel.stringValue = "Not available"
+            fileLocationLabel.stringValue = "Not Available"
         }
     }
 
