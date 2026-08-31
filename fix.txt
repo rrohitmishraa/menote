@@ -1,0 +1,183 @@
+Fix the packaging/install issue in Menote.
+
+CURRENT PROBLEM:
+
+build_pkg.sh successfully generates a .pkg file, but when I install that package, Menote does NOT appear in the user's Applications folder.
+
+The package may appear to install successfully, but the resulting:
+
+/Applications/Menote.app
+
+does not exist.
+
+==================================================
+GOAL
+==================================================
+
+The generated installer package MUST install Menote.app into:
+
+/Applications/
+
+After installation, this must exist:
+
+/Applications/Menote.app
+
+The installed application must be launchable normally from Finder and Launchpad.
+
+==================================================
+IMPORTANT
+==================================================
+
+Inspect the existing build_pkg.sh and packaging configuration before changing anything.
+
+Do NOT rewrite the application build process unnecessarily.
+
+Do NOT change:
+
+- Menote source code
+- .menote file format
+- default file location
+- Contexts
+- About page
+- Save
+- Save a Copy
+- Open
+- version/build system
+- offline architecture
+
+This is specifically a packaging/install-location bug.
+
+==================================================
+PACKAGE STRUCTURE
+==================================================
+
+Inspect the generated .pkg contents and verify that it contains the actual:
+
+Menote.app
+
+application bundle.
+
+The package must have an installation payload equivalent to:
+
+/Applications/Menote.app
+
+not:
+
+/usr/local/...
+~/...
+build/...
+or another unintended location.
+
+==================================================
+PKG INSTALLATION
+==================================================
+
+Use the correct macOS installer package mechanism so that:
+
+Menote.app → /Applications/
+
+The installer should not depend on the current working directory.
+
+It should not install relative to the directory from which build_pkg.sh was executed.
+
+It should not install into the build directory.
+
+==================================================
+BUILD SCRIPT
+==================================================
+
+Fix build_pkg.sh so every newly generated package has the correct installation destination.
+
+The existing package name should remain:
+
+build/Menote-<VERSION>.pkg
+
+For example:
+
+build/Menote-3.0.0.pkg
+
+The version/build system must continue working.
+
+==================================================
+VERIFICATION
+==================================================
+
+After modifying build_pkg.sh:
+
+1. Remove any existing /Applications/Menote.app if necessary for testing.
+
+2. Run:
+
+./build_pkg.sh
+
+3. Verify the package was created.
+
+4. Inspect the package payload and confirm Menote.app is targeted at:
+
+/Applications/Menote.app
+
+5. Install the generated .pkg.
+
+6. Verify:
+
+ls -ld /Applications/Menote.app
+
+7. Verify the application bundle is valid:
+
+/Applications/Menote.app/Contents/MacOS/Menote
+
+exists and is executable.
+
+8. Launch:
+
+open /Applications/Menote.app
+
+9. Confirm Menote launches successfully.
+
+10. Confirm the app appears in Finder → Applications.
+
+==================================================
+DO NOT JUST TEST BUILD SUCCESS
+==================================================
+
+A successful:
+
+swift build
+
+is NOT sufficient.
+
+A successful:
+
+productbuild
+
+or package creation is also NOT sufficient.
+
+The actual installed result must be verified.
+
+The final verification must prove:
+
+.pkg
+  ↓
+Installer
+  ↓
+/Applications/Menote.app
+  ↓
+Menote launches
+
+==================================================
+IMPORTANT macOS DETAIL
+==================================================
+
+Use an explicit package install location / payload structure appropriate for a macOS application.
+
+Do not assume that simply placing Menote.app next to the package or inside build/ means the installer will install it into Applications.
+
+Inspect the actual package contents and installation paths.
+
+After fixing it, report:
+
+- What was wrong with the previous package.
+- What was changed in build_pkg.sh.
+- The exact package payload/install location.
+- Whether /Applications/Menote.app was verified after installation.
+- Whether the installed application launched successfully.

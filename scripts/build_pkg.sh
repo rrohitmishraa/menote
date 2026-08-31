@@ -54,9 +54,19 @@ fi
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR"
 
-# Stage the app on a local filesystem to avoid BOM crashes on ExFAT/FAT volumes
+# Stage the app on a local filesystem to avoid BOM crashes on ExFAT/FAT volumes.
+# The project tree (including build/Menote.app) lives on an ExFAT volume that
+# has no POSIX permission storage, so every packaged file is presented as 0700.
+# If left as-is, the installer restores those 0700 modes with root ownership,
+# producing an /Applications/Menote.app that the user cannot access or launch.
+# ditto + explicit chmod normalizes modes on the local (APFS) staged copy.
 STAGED_APP="$TMP_ROOT/$APP_NAME.app"
-cp -R "$APP_PATH" "$STAGED_APP"
+ditto "$APP_PATH" "$STAGED_APP"
+
+# Normalize permissions: dirs and executable bits 0755, other files 0644.
+find "$STAGED_APP" -type d -exec chmod 755 {} +
+find "$STAGED_APP" -type f -exec chmod 644 {} +
+chmod 755 "$STAGED_APP/Contents/MacOS/Menote"
 
 # Create component package
 pkgbuild \
